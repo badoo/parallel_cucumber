@@ -7,12 +7,15 @@ module ParallelCucumber
         scenario_groups(group_size, options)
       end
 
+      private
+
       def scenario_groups(group_size, options)
         dry_run_report = generate_dry_run_report(options)
         distribution_data = begin
           JSON.parse(dry_run_report)
         rescue JSON::ParserError
-          raise("Can't parse JSON from dry run:\n\t#{dry_run_report}")
+          dry_run_report = "#{dry_run_report[0..1020]}…" if dry_run_report.length > 1024
+          raise("Can't parse JSON from dry run:\n#{dry_run_report}")
         end
         all_runnable_scenarios = distribution_data.map do |feature|
           next if feature['elements'].nil?
@@ -36,7 +39,9 @@ module ParallelCucumber
       end
 
       def generate_dry_run_report(options)
-        cmd = "cucumber #{options[:cucumber_options]} --dry-run --format json #{options[:cucumber_args].join(' ')}"
+        cucumber_options = options[:cucumber_options].gsub(/(--format|-f|--output|-o)\s+[^\s]+/, '')
+
+        cmd = "cucumber #{cucumber_options} --dry-run --format json #{options[:cucumber_args].join(' ')}"
         result = `#{cmd} 2>/dev/null`
         exit_status = $?.exitstatus
         if exit_status != 0 || result.empty?
