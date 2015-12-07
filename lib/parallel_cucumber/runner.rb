@@ -6,8 +6,6 @@ module ParallelCucumber
     class << self
       def run_tests(cucumber_args, process_number, options)
         cmd = command_for_test(process_number, options[:cucumber_options], cucumber_args)
-        $stdout.print("#{process_number}> Command: #{cmd}\n")
-        $stdout.flush
         execute_command_for_process(process_number, cmd)
       end
 
@@ -25,10 +23,12 @@ module ParallelCucumber
       end
 
       def execute_command_for_process(process_number, cmd)
-        output = open("|#{cmd} 2>&1", 'r') { |stdout| show_output(stdout, process_number) }
+        puts("#{process_number}>> Pid: #{Process.pid}; command: #{cmd}")
+
+        output = IO.popen("#{cmd} 2>&1") { |stdout| show_output(stdout, process_number) }
         exit_status = $?.exitstatus
 
-        puts "\n****** PROCESS #{process_number} COMPLETED ******\n\n"
+        puts("#{process_number}>> PROCESS COMPLETED")
         { stdout: output, exit_status: exit_status }
       end
 
