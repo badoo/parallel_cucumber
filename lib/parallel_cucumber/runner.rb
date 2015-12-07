@@ -54,7 +54,8 @@ module ParallelCucumber
           end
         rescue IO::WaitReadable
           timeout = probable_finish ? 10 : 300
-          IO.select([io], [], [], timeout)
+          result = IO.select([io], [], [], timeout)
+          raise("Timeout reached in #{timeout}s") if result.nil?
           retry
         rescue EOFError
         ensure
