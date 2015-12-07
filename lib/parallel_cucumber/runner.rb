@@ -23,9 +23,14 @@ module ParallelCucumber
       end
 
       def execute_command_for_process(process_number, cmd)
-        puts("#{process_number}>> Pid: #{Process.pid}; command: #{cmd}")
+        puts("#{process_number}>> Command: #{cmd}")
 
-        output = IO.popen("#{cmd} 2>&1") { |stdout| show_output(stdout, process_number) }
+        output = IO.popen("#{cmd} 2>&1") do |io|
+          puts("#{process_number}>> Pid: #{io.pid}")
+          show_output(io, process_number)
+          puts("#{process_number}>> Output shown")
+        end
+        puts("#{process_number}>> Getting status...")
         exit_status = $?.exitstatus
 
         puts("#{process_number}>> PROCESS COMPLETED")
@@ -44,7 +49,10 @@ module ParallelCucumber
             end
           end
         rescue EOFError
+          $stdout.print "#{process_number}>> EOF"
+          $stdout.flush
         end
+        $stdout.print "#{process_number}>> Returning result"
         result
       end
     end # self
