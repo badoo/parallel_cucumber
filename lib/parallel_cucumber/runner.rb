@@ -37,23 +37,31 @@ module ParallelCucumber
         { stdout: output, exit_status: exit_status }
       end
 
-      def show_output(stream, process_number)
-        result = ''
+      def show_output(io, process_number)
+        remaining_part = ''
+        probable_finish = false
         begin
           loop do
-            begin
-              read = stream.readline
-              $stdout.print "#{process_number}> #{read}"
+            probable_finish = false
+            text_block = remaining_part + io.read_nonblock(32 * 1024)
+            lines = text_block.split("\n")
+            remaining_part = lines.pop
+            lines.each do |line|
+              probable_finish = true unless (line =~ /\d+m[\d\.]+s/).nil?
+              $stdout.print("#{process_number}>#{line}\n")
               $stdout.flush
-              result << read
             end
           end
+        rescue IO::WaitReadable
+          timeout = probable_finish ? 10 : 300
+          IO.select([io], [], [], timeout)
+          retry
         rescue EOFError
-          $stdout.print "#{process_number}>> EOF"
+        ensure
+          $stdout.print("#{process_number}>#{remaining_part}\n")
           $stdout.flush
         end
-        $stdout.print "#{process_number}>> Returning result"
-        result
+
       end
     end # self
   end # Runner
