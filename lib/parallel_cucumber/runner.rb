@@ -42,10 +42,10 @@ module ParallelCucumber
         probable_finish = false
         begin
           loop do
-            probable_finish = false
             text_block = remaining_part + io.read_nonblock(32 * 1024)
             lines = text_block.split("\n")
             remaining_part = lines.pop
+            probable_finish = !(remaining_part =~ /\d+m[\d\.]+s/).nil?
             lines.each do |line|
               probable_finish = true unless (line =~ /\d+m[\d\.]+s/).nil?
               $stdout.print("#{process_number}>#{line}\n")
@@ -55,7 +55,13 @@ module ParallelCucumber
         rescue IO::WaitReadable
           timeout = probable_finish ? 10 : 300
           result = IO.select([io], [], [], timeout)
-          raise("Timeout reached in #{timeout}s") if result.nil?
+          if result.nil?
+            if probable_finish
+              warn("#{process_number}>Timeout reached in #{timeout}s, but process has probably finished")
+            else
+              raise("Read timeout has reached for process #{probable_finish}. There is no output in #{timeout}s")
+            end
+          end
           retry
         rescue EOFError
         ensure
