@@ -28,12 +28,9 @@ module ParallelCucumber
         output = IO.popen("#{cmd} 2>&1") do |io|
           puts("#{process_number}>> Pid: #{io.pid}")
           show_output(io, process_number)
-          puts("#{process_number}>> Output shown")
         end
-        puts("#{process_number}>> Getting status...")
         exit_status = $?.exitstatus
 
-        puts("#{process_number}>> PROCESS COMPLETED")
         { stdout: output, exit_status: exit_status }
       end
 
@@ -45,9 +42,9 @@ module ParallelCucumber
             text_block = remaining_part + io.read_nonblock(32 * 1024)
             lines = text_block.split("\n")
             remaining_part = lines.pop
-            probable_finish = !(remaining_part =~ /\d+m[\d\.]+s/).nil?
+            probable_finish = last_cucumber_line?(remaining_part)
             lines.each do |line|
-              probable_finish = true unless (line =~ /\d+m[\d\.]+s/).nil?
+              probable_finish = true if last_cucumber_line?(line)
               $stdout.print("#{process_number}>#{line}\n")
               $stdout.flush
             end
@@ -59,7 +56,7 @@ module ParallelCucumber
             if probable_finish
               warn("#{process_number}>Timeout reached in #{timeout}s, but process has probably finished")
             else
-              raise("Read timeout has reached for process #{probable_finish}. There is no output in #{timeout}s")
+              raise("Read timeout has reached for process #{process_number}. There is no output in #{timeout}s\nRemaining part is: `#{remaining_part}`")
             end
           else
             retry
@@ -69,7 +66,10 @@ module ParallelCucumber
           $stdout.print("#{process_number}>#{remaining_part}\n")
           $stdout.flush
         end
+      end
 
+      def last_cucumber_line?(line)
+        !(line =~ /\d+m[\d\.]+s/).nil?
       end
     end # self
   end # Runner
