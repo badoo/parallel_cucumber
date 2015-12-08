@@ -61,8 +61,9 @@ module ParallelCucumber
             else
               raise("Read timeout has reached for process #{probable_finish}. There is no output in #{timeout}s")
             end
+          else
+            retry
           end
-          retry
         rescue EOFError
         ensure
           $stdout.print("#{process_number}>#{remaining_part}\n")
