@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    parallel_cucumber (0.1.8)
+    parallel_cucumber (0.1.9)
       parallel (~> 1.6)
 
 GEM

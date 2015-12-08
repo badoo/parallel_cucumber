@@ -23,15 +23,21 @@ module ParallelCucumber
       end
 
       def execute_command_for_process(process_number, cmd)
-        puts("#{process_number}>> Command: #{cmd}")
+        $stdout.print(chevron_msg(process_number, "Command: #{cmd}"))
+        $stdout.flush
 
         output = IO.popen("#{cmd} 2>&1") do |io|
-          puts("#{process_number}>> Pid: #{io.pid}")
+          $stdout.print(chevron_msg(process_number, "Pid: #{io.pid}"))
+          $stdout.flush
           show_output(io, process_number)
         end
         exit_status = $?.exitstatus
 
         { stdout: output, exit_status: exit_status }
+      end
+
+      def chevron_msg(chevron, line)
+        "#{Time.new.strftime('%H:%M:%S')} #{chevron}> #{line}\n"
       end
 
       def show_output(io, process_number)
@@ -45,7 +51,7 @@ module ParallelCucumber
             probable_finish = last_cucumber_line?(remaining_part)
             lines.each do |line|
               probable_finish = true if last_cucumber_line?(line)
-              $stdout.print("#{process_number}>#{line}\n")
+              $stdout.print(chevron_msg(process_number, line))
               $stdout.flush
             end
           end
@@ -54,16 +60,17 @@ module ParallelCucumber
           result = IO.select([io], [], [], timeout)
           if result.nil?
             if probable_finish
-              warn("#{process_number}>Timeout reached in #{timeout}s, but process has probably finished")
+              message = chevron_msg(process_number, "Timeout reached in #{timeout}s, but process has probably finished")
+              warn(message)
             else
-              raise("Read timeout has reached for process #{process_number}. There is no output in #{timeout}s\nRemaining part is: `#{remaining_part}`")
+              raise("#{Time.new.strftime('%H:%M:%S')} Read timeout has reached for process #{process_number}. There is no output in #{timeout}s\nRemaining part is: `#{remaining_part}`")
             end
           else
             retry
           end
         rescue EOFError
         ensure
-          $stdout.print("#{process_number}>#{remaining_part}\n")
+          $stdout.print(chevron_msg(process_number, remaining_part))
           $stdout.flush
         end
       end
