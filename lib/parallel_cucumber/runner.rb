@@ -26,12 +26,18 @@ module ParallelCucumber
         $stdout.print(chevron_msg(process_number, "Command: #{cmd}"))
         $stdout.flush
 
-        output = IO.popen("#{cmd} 2>&1") do |io|
-          $stdout.print(chevron_msg(process_number, "Pid: #{io.pid}"))
-          $stdout.flush
-          show_output(io, process_number)
+        begin
+          output = IO.popen("#{cmd} 2>&1 | tee thread_#{process_number}.log") do |io|
+            $stdout.print(chevron_msg(process_number, "Pid: #{io.pid}"))
+            $stdout.flush
+            show_output(io, process_number)
+          end
+        ensure
+          puts(chevron_msg(process_number, "Process with pid #{$?.pid}:"))
+          puts(`ps -axf | grep #{$?.pid} | grep -v grep`)
+          exit_status = $?.exitstatus
+          puts(chevron_msg(process_number, "Exit status: #{exit_status}"))
         end
-        exit_status = $?.exitstatus
 
         { stdout: output, exit_status: exit_status }
       end
