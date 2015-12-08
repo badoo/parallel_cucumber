@@ -24,7 +24,7 @@ module ParallelCucumber
         on_finish = lambda do |_item, index, _result|
           completed.push(index)
           remaining_threads = ((0..threads - 1).to_a - completed).sort
-          puts "#{Time.new.strftime('%H:%M:%S')} Thread #{index} has finished. Remaining(#{remaining_threads.count}): #{remaining_threads.join(', ')}"
+          puts "Thread #{index} has finished. Remaining(#{remaining_threads.count}): #{remaining_threads.join(', ')}"
         end
 
         test_results = Parallel.map_with_index(

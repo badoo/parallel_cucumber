@@ -23,27 +23,25 @@ module ParallelCucumber
       end
 
       def execute_command_for_process(process_number, cmd)
-        $stdout.print(chevron_msg(process_number, "Command: #{cmd}"))
-        $stdout.flush
+        print_chevron_msg(process_number, "Command: #{cmd}")
 
         begin
           output = IO.popen("#{cmd} 2>&1 | tee thread_#{process_number}.log") do |io|
-            $stdout.print(chevron_msg(process_number, "Pid: #{io.pid}"))
-            $stdout.flush
+            print_chevron_msg(process_number, "Pid: #{io.pid}")
             show_output(io, process_number)
           end
         ensure
-          puts(chevron_msg(process_number, "Process with pid #{$?.pid}:"))
-          puts(`ps -axf | grep #{$?.pid} | grep -v grep`)
           exit_status = $?.exitstatus
-          puts(chevron_msg(process_number, "Exit status: #{exit_status}"))
+          print_chevron_msg(process_number, "Exited with status #{exit_status}")
         end
 
         { stdout: output, exit_status: exit_status }
       end
 
-      def chevron_msg(chevron, line)
-        "#{Time.new.strftime('%H:%M:%S')} #{chevron}> #{line}\n"
+      def print_chevron_msg(chevron, line, io=$stdout)
+        msg = "#{chevron}> #{line}\n"
+        io.print(msg)
+        io.flush
       end
 
       def show_output(io, process_number)
@@ -57,27 +55,24 @@ module ParallelCucumber
             probable_finish = last_cucumber_line?(remaining_part)
             lines.each do |line|
               probable_finish = true if last_cucumber_line?(line)
-              $stdout.print(chevron_msg(process_number, line))
-              $stdout.flush
+              print_chevron_msg(process_number, line)
             end
           end
         rescue IO::WaitReadable
-          timeout = probable_finish ? 10 : 300
+          timeout = probable_finish ? 10 : 1800
           result = IO.select([io], [], [], timeout)
           if result.nil?
             if probable_finish
-              message = chevron_msg(process_number, "Timeout reached in #{timeout}s, but process has probably finished")
-              warn(message)
+              print_chevron_msg(process_number, "Timeout reached in #{timeout}s, but process has probably finished", $stderr)
             else
-              raise("#{Time.new.strftime('%H:%M:%S')} Read timeout has reached for process #{process_number}. There is no output in #{timeout}s\nRemaining part is: `#{remaining_part}`")
+              raise("Read timeout has reached for process #{process_number}. There is no output in #{timeout}s")
             end
           else
             retry
           end
         rescue EOFError
         ensure
-          $stdout.print(chevron_msg(process_number, remaining_part))
-          $stdout.flush
+          print_chevron_msg(process_number, remaining_part)
         end
       end
 
