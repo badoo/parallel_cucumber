@@ -40,6 +40,10 @@ module ParallelCucumber
 
       def generate_dry_run_report(options)
         cucumber_options = options[:cucumber_options].gsub(/(--format|-f|--output|-o)\s+[^\s]+/, '')
+        unless options[:profile_with_reporters].nil?
+          profile_with_reporters = options[:profile_with_reporters]
+          cucumber_options = cucumber_options.gsub(/(--profile|-p)\s+#{profile_with_reporters}(\s+|$)/, '')
+        end
 
         cmd = "cucumber #{cucumber_options} --dry-run --format json #{options[:cucumber_args].join(' ')}"
         result = `#{cmd} 2>/dev/null`

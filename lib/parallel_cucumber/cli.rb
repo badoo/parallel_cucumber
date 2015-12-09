@@ -29,6 +29,9 @@ module ParallelCucumber
           opts.on('-o', '--cucumber_options "[OPTIONS]"', 'Run cucumber with these options') do |cucumber_options|
             options[:cucumber_options] = cucumber_options
           end
+          opts.on('--workaround_for_profile_with_reporters "[OPTIONS]"') do |profile_with_reporters|
+            options[:profile_with_reporters] = profile_with_reporters
+          end
           opts.on('-n [PROCESSES]', Integer, 'How many processes to use') { |n| options[:n] = n }
         end
 
