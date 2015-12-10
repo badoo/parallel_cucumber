@@ -10,27 +10,31 @@ module ParallelCucumber
       private
 
       def scenario_groups(group_size, options)
-        dry_run_report = generate_dry_run_report(options)
-        distribution_data = begin
-          JSON.parse(dry_run_report)
-        rescue JSON::ParserError
-          dry_run_report = "#{dry_run_report[0..1020]}…" if dry_run_report.length > 1024
-          raise("Can't parse JSON from dry run:\n#{dry_run_report}")
-        end
+        distribution_data = generate_dry_run_report(options)
         all_runnable_scenarios = distribution_data.map do |feature|
           next if feature['elements'].nil?
           feature['elements'].map do |scenario|
             if scenario['keyword'] == 'Scenario'
-              "#{feature['uri']}:#{scenario['line']}"
+              {
+                line: "#{feature['uri']}:#{scenario['line']}",
+                weight: 1
+              }
             elsif scenario['keyword'] == 'Scenario Outline'
               if scenario['examples']
                 scenario['examples'].map do |example|
-                  example['rows'].drop(1).map do |row| # Drop the first row with column names
-                    "#{feature['uri']}:#{row['line']}"
+                  examples_count = example['rows'].count - 1 # Do not count the first row with column names
+                  if examples_count > 0
+                    {
+                      line: "#{feature['uri']}:#{example['line']}",
+                      weight: examples_count
+                    }
                   end
                 end
-              else
-                "#{feature['uri']}:#{scenario['line']}" # Cope with --expand
+              else # Cucumber 1.3 with -x/--expand or Cucumber > 2.0
+                {
+                  line: "#{feature['uri']}:#{scenario['line']}",
+                  weight: 1
+                }
               end
             end
           end
@@ -46,30 +50,30 @@ module ParallelCucumber
         end
 
         cmd = "cucumber #{cucumber_options} --dry-run --format json #{options[:cucumber_args].join(' ')}"
-        result = `#{cmd} 2>/dev/null`
+        dry_run_report = `#{cmd} 2>/dev/null`
         exit_status = $?.exitstatus
-        if exit_status != 0 || result.empty?
+        if exit_status != 0 || dry_run_report.empty?
           cmd = "bundle exec #{cmd}" if ENV['BUNDLE_BIN_PATH']
           fail("Can't generate dry run report, command exited with #{exit_status}:\n\t#{cmd}")
         end
-        result
+
+        begin
+          JSON.parse(dry_run_report)
+        rescue JSON::ParserError
+          dry_run_report = "#{dry_run_report[0..1020]}…" if dry_run_report.length > 1024
+          raise("Can't parse JSON from dry run:\n#{dry_run_report}")
+        end
       end
 
-      def group_creator(group_size, items)
-        items_per_group = items.size / group_size
-        groups = Array.new(group_size) { [] }
-        if items_per_group > 0
-          groups.each do |group|
-            group.push(*items[0..items_per_group - 1])
-            items = items.drop(items_per_group)
-          end
+      def group_creator(groups_count, tasks)
+        groups = Array.new(groups_count) { [] }
+
+        sorted_tasks = tasks.sort { |t1, t2| t2[:weight] <=> t1[:weight] }
+        sorted_tasks.each do |task|
+          group = groups.min_by { |group| group.size }
+          group.push(task[:line], *Array.new(task[:weight] - 1))
         end
-        unless items.empty?
-          items.each_with_index do |item, index|
-            groups[index] << item
-          end
-        end
-        groups.reject(&:empty?)
+        groups.reject(&:empty?).map(&:compact)
       end
     end # self
   end # FeatureGrouper
