@@ -1,4 +1,6 @@
+require 'erb'
 require 'json'
+require 'yaml'
 
 module ParallelCucumber
   class FeatureGrouper
@@ -43,11 +45,9 @@ module ParallelCucumber
       end
 
       def generate_dry_run_report(options)
-        cucumber_options = options[:cucumber_options].gsub(/(--format|-f|--output|-o)\s+[^\s]+/, '')
-        unless options[:profile_with_reporters].nil?
-          profile_with_reporters = options[:profile_with_reporters]
-          cucumber_options = cucumber_options.gsub(/(--profile|-p)\s+#{profile_with_reporters}(\s+|$)/, '')
-        end
+        cucumber_options = options[:cucumber_options]
+        cucumber_options = expand_profiles(cucumber_options) unless cucumber_config_file.nil?
+        cucumber_options = cucumber_options.gsub(/(--format|-f|--out|-o)\s+[^\s]+/, '')
 
         cmd = "cucumber #{cucumber_options} --dry-run --format json #{options[:cucumber_args].join(' ')}"
         dry_run_report = `#{cmd} 2>/dev/null`
@@ -63,6 +63,31 @@ module ParallelCucumber
           dry_run_report = "#{dry_run_report[0..1020]}…" if dry_run_report.length > 1024
           raise("Can't parse JSON from dry run:\n#{dry_run_report}")
         end
+      end
+
+      def cucumber_config_file
+        Dir.glob('{,.config/,config/}cucumber{.yml,.yaml}').first
+      end
+
+      def expand_profiles(cucumber_options)
+        config = YAML.load(ERB.new(File.read(cucumber_config_file)).result)
+        _expand_profiles(cucumber_options, config)
+      end
+
+      def _expand_profiles(options, config)
+        expand_next = false
+        options.split.map do |option|
+          case
+            when %w(-p --profile).include?(option)
+              expand_next = true
+              next
+            when expand_next
+              expand_next = false
+              _expand_profiles(config[option], config)
+            else
+              option
+          end
+        end.compact.join(' ')
       end
 
       def group_creator(groups_count, tasks)
