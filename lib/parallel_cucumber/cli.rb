@@ -39,10 +39,6 @@ module ParallelCucumber
             options[:thread_delay] = thread_delay
           end
           opts.on('-n [PROCESSES]', Integer, 'How many processes to use') { |n| options[:n] = n }
-
-          opts.on('--workaround-for-profile-with-reporters "[OPTIONS]"') do |profile_with_reporters|
-            options[:profile_with_reporters] = profile_with_reporters
-          end
         end
 
         option_parser.parse!(argv)
