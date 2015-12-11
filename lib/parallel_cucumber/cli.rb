@@ -3,6 +3,11 @@ require 'optparse'
 module ParallelCucumber
   module Cli
     class << self
+      DEFAULTS = {
+        n: 1,
+        thread_delay: 0,
+      }
+
       def run(argv)
         options = parse_options!(argv)
 
@@ -12,7 +17,8 @@ module ParallelCucumber
       private
 
       def parse_options!(argv)
-        options = {}
+        options = DEFAULTS.dup
+
         option_parser = OptionParser.new do |opts|
           opts.banner = [
             'Usage: parallel_cucumber [options] [ [FILE|DIR|URL][:LINE[:LINE]*] ]',
@@ -26,13 +32,17 @@ module ParallelCucumber
             puts ParallelCucumber::VERSION
             exit 0
           end
-          opts.on('-o', '--cucumber_options "[OPTIONS]"', 'Run cucumber with these options') do |cucumber_options|
+          opts.on('-o', '--cucumber-options "[OPTIONS]"', 'Run cucumber with these options') do |cucumber_options|
             options[:cucumber_options] = cucumber_options
           end
-          opts.on('--workaround_for_profile_with_reporters "[OPTIONS]"') do |profile_with_reporters|
-            options[:profile_with_reporters] = profile_with_reporters
+          opts.on('--thread-delay "[SECONDS]"', Integer, 'Delay before next thread starting') do |thread_delay|
+            options[:thread_delay] = thread_delay
           end
           opts.on('-n [PROCESSES]', Integer, 'How many processes to use') { |n| options[:n] = n }
+
+          opts.on('--workaround-for-profile-with-reporters "[OPTIONS]"') do |profile_with_reporters|
+            options[:profile_with_reporters] = profile_with_reporters
+          end
         end
 
         option_parser.parse!(argv)

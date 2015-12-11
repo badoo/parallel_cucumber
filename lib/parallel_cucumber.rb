@@ -1,5 +1,3 @@
-require 'rbconfig'
-
 require 'parallel'
 
 require 'parallel_cucumber/cli'
@@ -9,11 +7,9 @@ require 'parallel_cucumber/runner'
 require 'parallel_cucumber/version'
 
 module ParallelCucumber
-  WINDOWS = (RbConfig::CONFIG['host_os'] =~ /cygwin|mswin|mingw|bccwin|wince|emx/)
-
   class << self
     def run_tests_in_parallel(options)
-      number_of_processes = options[:n] || 1
+      number_of_processes = options[:n]
       test_results = nil
 
       report_time_taken do

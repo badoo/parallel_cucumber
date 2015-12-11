@@ -5,21 +5,23 @@ module ParallelCucumber
   module Runner
     class << self
       def run_tests(cucumber_args, process_number, options)
-        cmd = command_for_test(process_number, options[:cucumber_options], cucumber_args)
+        cmd = command_for_test(process_number, options[:cucumber_options], cucumber_args, options[:thread_delay])
         execute_command_for_process(process_number, cmd)
       end
 
       private
 
-      def command_for_test(process_number, cucumber_options, cucumber_args)
+      def command_for_test(process_number, cucumber_options, cucumber_args, thread_delay)
         cmd = ['cucumber', cucumber_options, *cucumber_args].compact * ' '
         env = {
           AUTOTEST: 1,
           TEST_PROCESS_NUMBER: process_number
         }
-        separator = (WINDOWS ? ' & ' : ';')
-        exports = env.map { |k, v| WINDOWS ? "(SET \"#{k}=#{v}\")" : "#{k}=#{v};export #{k}" }.join(separator)
-        "#{exports}#{separator} #{cmd}"
+        exports = env.map { |k, v| "#{k}=#{v}" }.join(' ')
+
+        sleep = thread_delay > 0 ? "sleep #{thread_delay * process_number}; " : ''
+
+        "#{sleep}#{exports} #{cmd}"
       end
 
       def execute_command_for_process(process_number, cmd)
