@@ -1,3 +1,4 @@
+require 'json'
 require 'optparse'
 
 module ParallelCucumber
@@ -5,7 +6,8 @@ module ParallelCucumber
     class << self
       DEFAULTS = {
         n: 1,
-        thread_delay: 0
+        thread_delay: 0,
+        env_variables: {}
       }
 
       def run(argv)
@@ -27,6 +29,14 @@ module ParallelCucumber
           opts.on('-n [PROCESSES]', Integer, 'How many processes to use') { |n| options[:n] = n }
           opts.on('-o', '--cucumber-options "[OPTIONS]"', 'Run cucumber with these options') do |cucumber_options|
             options[:cucumber_options] = cucumber_options
+          end
+          opts.on('-e', '--env-variables [JSON]', 'Set additional environment variables to processes') do |env_vars|
+            options[:env_variables] = begin
+              JSON.parse(env_vars)
+            rescue JSON::ParserError
+              puts 'Additional environment variables not in JSON format. And do not forget to escape quotes'
+              exit 1
+            end
           end
           opts.on('--thread-delay "[SECONDS]"', Integer, 'Delay before next thread starting') do |thread_delay|
             options[:thread_delay] = thread_delay
