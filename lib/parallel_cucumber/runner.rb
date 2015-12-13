@@ -14,13 +14,15 @@ module ParallelCucumber
     private
 
     def command_for_test(process_number, cucumber_args)
-      cucumber_options = @options[:cucumber_options]
       thread_delay = @options[:thread_delay]
+      cucumber_options = @options[:cucumber_options]
+      setup_script = @options[:setup_script]
 
-      cmd = ['cucumber', cucumber_options, *cucumber_args].compact.join(' ')
-      sleep = thread_delay > 0 ? "sleep #{thread_delay * process_number}; " : ''
+      delay_cmd = thread_delay > 0 ? "sleep #{thread_delay * process_number}" : nil
+      setup_cmd = setup_script.nil? ? nil : setup_script
+      cucumber_cmd = ['cucumber', cucumber_options, *cucumber_args].compact.join(' ')
 
-      "#{sleep}#{cmd}"
+      [delay_cmd, setup_cmd, cucumber_cmd].compact.join(' && ')
     end
 
     def execute_command_for_process(process_number, cmd)

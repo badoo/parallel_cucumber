@@ -38,6 +38,11 @@ module ParallelCucumber
               exit 1
             end
           end
+          opts.on('-s', '--setup-script [SCRIPT]', 'Execute SCRIPT before each process') do |script|
+            fail("File '#{script}' does not exist") unless File.exist?(script)
+            fail("File '#{script}' is not executable") unless File.executable?(script)
+            options[:setup_script] = File.expand_path(script)
+          end
           opts.on('--thread-delay "[SECONDS]"', Integer, 'Delay before next thread starting') do |thread_delay|
             options[:thread_delay] = thread_delay
           end
