@@ -19,7 +19,7 @@ module ParallelCucumber
 
         on_finish = lambda do |_item, index, _result|
           completed.push(index)
-          remaining_threads = ((0..threads - 1).to_a - completed).sort
+          remaining_threads = ((0...threads).to_a - completed).sort
           puts "Thread #{index} has finished. Remaining(#{remaining_threads.count}): #{remaining_threads.join(', ')}"
         end
 
@@ -28,7 +28,7 @@ module ParallelCucumber
           in_threads: threads,
           finish: on_finish
         ) do |group, index|
-          Runner.run_tests(group, index, options)
+          Runner.new(options).run_tests(index, group)
         end
         puts 'All threads are complete'
         ResultFormatter.report_results(test_results)
