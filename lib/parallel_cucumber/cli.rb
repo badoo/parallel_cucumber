@@ -24,7 +24,7 @@ module ParallelCucumber
         option_parser = OptionParser.new do |opts|
           opts.banner = [
             'Usage: parallel_cucumber [options] [ [FILE|DIR|URL][:LINE[:LINE]*] ]',
-            'Example: parallel_cucumber ... '
+            'Example: parallel_cucumber -n 4 -o "-f pretty -f html -o report.html" examples/i18n/en/features'
           ].join("\n")
           opts.on('-n [PROCESSES]', Integer, 'How many processes to use') { |n| options[:n] = n }
           opts.on('-o', '--cucumber-options "[OPTIONS]"', 'Run cucumber with these options') do |cucumber_options|
