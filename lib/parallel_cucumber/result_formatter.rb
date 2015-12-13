@@ -65,8 +65,8 @@ module ParallelCucumber
       end
 
       def failing_scenario_regex
-        /^cucumber .*features\/.+:\d+/
+        %r{^cucumber .*features/.+:\d+}
       end
-    end # self
+    end # class
   end # ResultFormatter
 end # ParallelCucumber

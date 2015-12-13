@@ -13,7 +13,8 @@ Gem::Specification.new name, ParallelCucumber::VERSION do |spec|
   spec.executables = spec.files.grep(%r{^bin/}) { |f| File.basename(f) }
   spec.require_paths = 'lib'
 
+  spec.add_runtime_dependency 'cucumber'
   spec.add_runtime_dependency 'parallel', '~> 1.6'
   spec.add_development_dependency 'bundler', '~> 1.10'
-  spec.add_development_dependency 'cucumber'
+  spec.add_development_dependency 'rubocop', '~> 0.35'
 end
