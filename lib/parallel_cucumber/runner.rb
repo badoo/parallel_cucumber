@@ -64,7 +64,7 @@ module ParallelCucumber
 
       {
         TEST: 1,
-        TEST_THREAD_NUMBER: process_number
+        TEST_PROCESS_NUMBER: process_number
       }.merge(env).map { |k, v| [k.to_s, v.to_s] }.to_h
     end
 
