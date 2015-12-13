@@ -1,9 +1,10 @@
+require 'English'
 require 'erb'
 require 'json'
 require 'yaml'
 
 module ParallelCucumber
-  class FeatureGrouper
+  class Grouper
     class << self
       def feature_groups(options, group_size)
         scenario_groups(group_size, options)
@@ -25,12 +26,11 @@ module ParallelCucumber
               if scenario['examples']
                 scenario['examples'].map do |example|
                   examples_count = example['rows'].count - 1 # Do not count the first row with column names
-                  if examples_count > 0
-                    {
-                      line: "#{feature['uri']}:#{example['line']}",
-                      weight: examples_count
-                    }
-                  end
+                  next unless examples_count > 0
+                  {
+                    line: "#{feature['uri']}:#{example['line']}",
+                    weight: examples_count
+                  }
                 end
               else # Cucumber 1.3 with -x/--expand or Cucumber > 2.0
                 {
@@ -51,7 +51,7 @@ module ParallelCucumber
 
         cmd = "cucumber #{cucumber_options} --dry-run --format json #{options[:cucumber_args].join(' ')}"
         dry_run_report = `#{cmd} 2>/dev/null`
-        exit_status = $?.exitstatus
+        exit_status = $CHILD_STATUS.exitstatus
         if exit_status != 0 || dry_run_report.empty?
           cmd = "bundle exec #{cmd}" if ENV['BUNDLE_BIN_PATH']
           fail("Can't generate dry run report, command exited with #{exit_status}:\n\t#{cmd}")
@@ -60,8 +60,8 @@ module ParallelCucumber
         begin
           JSON.parse(dry_run_report)
         rescue JSON::ParserError
-          dry_run_report = "#{dry_run_report[0..1020]}…" if dry_run_report.length > 1024
-          raise("Can't parse JSON from dry run:\n#{dry_run_report}")
+          stdout = dry_run_report.length > 1024 ? "#{dry_run_report[0...1000]} ...[TRUNCATED]..." : dry_run_report
+          raise("Can't parse JSON from dry run:\n#{stdout}")
         end
       end
 
@@ -78,14 +78,14 @@ module ParallelCucumber
         expand_next = false
         options.split.map do |option|
           case
-            when %w(-p --profile).include?(option)
-              expand_next = true
-              next
-            when expand_next
-              expand_next = false
-              _expand_profiles(config[option], config)
-            else
-              option
+          when %w(-p --profile).include?(option)
+            expand_next = true
+            next
+          when expand_next
+            expand_next = false
+            _expand_profiles(config[option], config)
+          else
+            option
           end
         end.compact.join(' ')
       end
@@ -95,11 +95,11 @@ module ParallelCucumber
 
         sorted_tasks = tasks.sort { |t1, t2| t2[:weight] <=> t1[:weight] }
         sorted_tasks.each do |task|
-          group = groups.min_by { |group| group.size }
+          group = groups.min_by(&:size)
           group.push(task[:line], *Array.new(task[:weight] - 1))
         end
         groups.reject(&:empty?).map(&:compact)
       end
-    end # self
-  end # FeatureGrouper
+    end # class
+  end # Grouper
 end # ParallelCucumber

@@ -5,7 +5,7 @@ module ParallelCucumber
     class << self
       DEFAULTS = {
         n: 1,
-        thread_delay: 0,
+        thread_delay: 0
       }
 
       def run(argv)
@@ -24,21 +24,21 @@ module ParallelCucumber
             'Usage: parallel_cucumber [options] [ [FILE|DIR|URL][:LINE[:LINE]*] ]',
             'Example: parallel_cucumber ... '
           ].join("\n")
-          opts.on('-h', '--help', 'Show this') do
-            puts opts
-            exit 0
-          end
-          opts.on('-v', '--version', 'Show version') do
-            puts ParallelCucumber::VERSION
-            exit 0
-          end
+          opts.on('-n [PROCESSES]', Integer, 'How many processes to use') { |n| options[:n] = n }
           opts.on('-o', '--cucumber-options "[OPTIONS]"', 'Run cucumber with these options') do |cucumber_options|
             options[:cucumber_options] = cucumber_options
           end
           opts.on('--thread-delay "[SECONDS]"', Integer, 'Delay before next thread starting') do |thread_delay|
             options[:thread_delay] = thread_delay
           end
-          opts.on('-n [PROCESSES]', Integer, 'How many processes to use') { |n| options[:n] = n }
+          opts.on('-v', '--version', 'Show version') do
+            puts ParallelCucumber::VERSION
+            exit 0
+          end
+          opts.on('-h', '--help', 'Show this') do
+            puts opts
+            exit 0
+          end
         end
 
         option_parser.parse!(argv)
@@ -50,6 +50,6 @@ module ParallelCucumber
         puts option_parser.help
         exit 1
       end
-    end # self
+    end # class
   end # Cli
 end # ParallelCucumber

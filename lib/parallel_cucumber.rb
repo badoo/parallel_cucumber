@@ -1,7 +1,7 @@
 require 'parallel'
 
 require 'parallel_cucumber/cli'
-require 'parallel_cucumber/feature_grouper'
+require 'parallel_cucumber/grouper'
 require 'parallel_cucumber/result_formatter'
 require 'parallel_cucumber/runner'
 require 'parallel_cucumber/version'
@@ -13,7 +13,7 @@ module ParallelCucumber
       test_results = nil
 
       report_time_taken do
-        groups = FeatureGrouper.feature_groups(options, number_of_processes)
+        groups = Grouper.feature_groups(options, number_of_processes)
         threads = groups.size
         completed = []
 
@@ -36,6 +36,8 @@ module ParallelCucumber
       exit(1) if any_test_failed?(test_results)
     end
 
+    private
+
     def any_test_failed?(test_results)
       test_results.any? { |result| result[:exit_status] != 0 }
     end
@@ -47,5 +49,5 @@ module ParallelCucumber
       mm, ss = time_in_sec.divmod(60)
       puts "\nTook #{mm} Minutes, #{ss.round(2)} Seconds"
     end
-  end # self
+  end # class
 end # ParallelCucumber

@@ -1,5 +1,4 @@
-require 'fileutils'
-require 'find'
+require 'English'
 
 module ParallelCucumber
   module Runner
@@ -12,35 +11,37 @@ module ParallelCucumber
       private
 
       def command_for_test(process_number, cucumber_options, cucumber_args, thread_delay)
-        cmd = ['cucumber', cucumber_options, *cucumber_args].compact * ' '
-        env = {
-          AUTOTEST: 1,
-          TEST_PROCESS_NUMBER: process_number
-        }
-        exports = env.map { |k, v| "#{k}=#{v}" }.join(' ')
-
+        cmd = ['cucumber', cucumber_options, *cucumber_args].compact.join(' ')
         sleep = thread_delay > 0 ? "sleep #{thread_delay * process_number}; " : ''
 
-        "#{sleep}#{exports} #{cmd}"
+        "#{sleep}#{cmd}"
       end
 
       def execute_command_for_process(process_number, cmd)
-        print_chevron_msg(process_number, "Command: #{cmd}")
+        env = env_for_test(process_number)
+        print_chevron_msg(process_number, "Custom env: #{env.map { |k, v| "#{k}=#{v}" }.join(' ')}; command: #{cmd}")
 
         begin
-          output = IO.popen("#{cmd} 2>&1 | tee thread_#{process_number}.log") do |io|
+          output = IO.popen(env, "#{cmd} 2>&1 | tee thread_#{process_number}.log") do |io|
             print_chevron_msg(process_number, "Pid: #{io.pid}")
             show_output(io, process_number)
           end
         ensure
-          exit_status = $?.exitstatus
+          exit_status = $CHILD_STATUS.exitstatus
           print_chevron_msg(process_number, "Exited with status #{exit_status}")
         end
 
         { stdout: output, exit_status: exit_status }
       end
 
-      def print_chevron_msg(chevron, line, io=$stdout)
+      def env_for_test(process_number, env = {})
+        {
+          TEST: 1,
+          TEST_THREAD_NUMBER: process_number
+        }.merge(env).map { |k, v| [k.to_s, v.to_s] }.to_h
+      end
+
+      def print_chevron_msg(chevron, line, io = $stdout)
         msg = "#{chevron}> #{line}\n"
         io.print(msg)
         io.flush
@@ -65,7 +66,8 @@ module ParallelCucumber
           result = IO.select([io], [], [], timeout)
           if result.nil?
             if probable_finish
-              print_chevron_msg(process_number, "Timeout reached in #{timeout}s, but process has probably finished", $stderr)
+              print_chevron_msg(process_number,
+                                "Timeout reached in #{timeout}s, but process has probably finished", $stderr)
             else
               raise("Read timeout has reached for process #{process_number}. There is no output in #{timeout}s")
             end
@@ -73,6 +75,7 @@ module ParallelCucumber
             retry
           end
         rescue EOFError
+          return
         ensure
           print_chevron_msg(process_number, remaining_part)
         end
@@ -81,6 +84,6 @@ module ParallelCucumber
       def last_cucumber_line?(line)
         !(line =~ /\d+m[\d\.]+s/).nil?
       end
-    end # self
+    end # class
   end # Runner
 end # ParallelCucumber

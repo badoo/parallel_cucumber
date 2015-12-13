@@ -2,11 +2,15 @@ PATH
   remote: .
   specs:
     parallel_cucumber (0.1.15)
+      cucumber
       parallel (~> 1.6)
 
 GEM
   remote: https://rubygems.org/
   specs:
+    ast (2.1.0)
+    astrolabe (1.3.1)
+      parser (~> 2.2)
     builder (3.2.2)
     cucumber (2.1.0)
       builder (>= 2.1.2)
@@ -22,14 +26,27 @@ GEM
     multi_json (1.11.2)
     multi_test (0.1.2)
     parallel (1.6.1)
+    parser (2.2.3.0)
+      ast (>= 1.1, < 3.0)
+    powerpack (0.1.1)
+    rainbow (2.0.0)
+    rubocop (0.35.1)
+      astrolabe (~> 1.3)
+      parser (>= 2.2.3.0, < 3.0)
+      powerpack (~> 0.1)
+      rainbow (>= 1.99.1, < 3.0)
+      ruby-progressbar (~> 1.7)
+      tins (<= 1.6.0)
+    ruby-progressbar (1.7.5)
+    tins (1.6.0)
 
 PLATFORMS
   ruby
 
 DEPENDENCIES
   bundler (~> 1.10)
-  cucumber
   parallel_cucumber!
+  rubocop (~> 0.35)
 
 BUNDLED WITH
    1.10.6
