@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    parallel_cucumber (0.1.17)
+    parallel_cucumber (0.1.18)
       cucumber
       parallel (~> 1.6)
 

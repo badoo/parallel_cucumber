@@ -30,7 +30,7 @@ module ParallelCucumber
       print_chevron_msg(process_number, "Custom env: #{env.map { |k, v| "#{k}=#{v}" }.join(' ')}; command: #{cmd}")
 
       begin
-        output = IO.popen(env, "#{cmd} 2>&1 | tee thread_#{process_number}.log") do |io|
+        output = IO.popen(env, "#{cmd} 2>&1") do |io|
           print_chevron_msg(process_number, "Pid: #{io.pid}")
           show_output(io, process_number)
         end
@@ -75,6 +75,7 @@ module ParallelCucumber
     end
 
     def show_output(io, process_number)
+      file = File.open("process_#{process_number}.log", 'w')
       remaining_part = ''
       probable_finish = false
       begin
@@ -86,6 +87,7 @@ module ParallelCucumber
           lines.each do |line|
             probable_finish = true if last_cucumber_line?(line)
             print_chevron_msg(process_number, line)
+            file.write("#{line}\n")
           end
         end
       rescue IO::WaitReadable
@@ -105,6 +107,8 @@ module ParallelCucumber
         return
       ensure
         print_chevron_msg(process_number, remaining_part)
+        file.write("#{remaining_part}")
+        file.close unless file.nil?
       end
     end
 
