@@ -103,13 +103,13 @@ module ParallelCucumber
         else
           retry
         end
-      rescue EOFError
-        return
+      rescue EOFError # rubocop:disable Lint/HandleExceptions
       ensure
         print_chevron_msg(process_number, remaining_part)
         file.write("#{remaining_part}")
         file.close unless file.nil?
       end
+      File.read("process_#{process_number}.log")
     end
 
     def last_cucumber_line?(line)
