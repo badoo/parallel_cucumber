@@ -1,6 +1,8 @@
 require 'English'
 require 'erb'
 require 'json'
+require 'open3'
+require 'tempfile'
 require 'yaml'
 
 module ParallelCucumber
@@ -48,21 +50,30 @@ module ParallelCucumber
         cucumber_options = options[:cucumber_options]
         cucumber_options = expand_profiles(cucumber_options) unless cucumber_config_file.nil?
         cucumber_options = cucumber_options.gsub(/(--format|-f|--out|-o)\s+[^\s]+/, '')
+        result = nil
 
-        cmd = "cucumber #{cucumber_options} --dry-run --format json #{options[:cucumber_args].join(' ')}"
-        dry_run_report = `#{cmd} 2>/dev/null`
-        exit_status = $CHILD_STATUS.exitstatus
-        if exit_status != 0 || dry_run_report.empty?
-          cmd = "bundle exec #{cmd}" if ENV['BUNDLE_BIN_PATH']
-          fail("Can't generate dry run report, command exited with #{exit_status}:\n\t#{cmd}")
-        end
+        Tempfile.open(%w(dry-run .json)) do |f|
+          dry_run_options = "--dry-run --format json --out #{f.path}"
 
-        begin
-          JSON.parse(dry_run_report)
-        rescue JSON::ParserError
-          stdout = dry_run_report.length > 1024 ? "#{dry_run_report[0...1000]} ...[TRUNCATED]..." : dry_run_report
-          raise("Can't parse JSON from dry run:\n#{stdout}")
+          cmd = "cucumber #{cucumber_options} #{dry_run_options} #{options[:cucumber_args].join(' ')}"
+          _stdout, stderr, status = Open3.capture3(cmd)
+          f.close
+
+          if status != 0
+            cmd = "bundle exec #{cmd}" if ENV['BUNDLE_BIN_PATH']
+            fail("Can't generate dry run report, command exited with #{status}:\n\t#{cmd}\n\t#{stderr}")
+          end
+
+          content = File.read(f.path)
+
+          result = begin
+            JSON.parse(content)
+          rescue JSON::ParserError
+            content = content.length > 1024 ? "#{content[0...1000]} ...[TRUNCATED]..." : content
+            raise("Can't parse JSON from dry run:\n#{content}")
+          end
         end
+        result
       end
 
       def cucumber_config_file
