@@ -5,9 +5,10 @@ module ParallelCucumber
   module Cli
     class << self
       DEFAULTS = {
-        n: 1,
+        env_variables: {},
         thread_delay: 0,
-        env_variables: {}
+        cucumber_options: '',
+        n: 1
       }
 
       def run(argv)
