@@ -44,7 +44,7 @@ module ParallelCucumber
             fail("File '#{script}' is not executable") unless File.executable?(script)
             options[:setup_script] = File.expand_path(script)
           end
-          opts.on('--thread-delay [SECONDS]', Integer, 'Delay before next thread starting') do |thread_delay|
+          opts.on('--thread-delay [SECONDS]', Float, 'Delay before next thread starting') do |thread_delay|
             options[:thread_delay] = thread_delay
           end
           opts.on('-v', '--version', 'Show version') do
