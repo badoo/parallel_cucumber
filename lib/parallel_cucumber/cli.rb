@@ -9,7 +9,7 @@ module ParallelCucumber
         thread_delay: 0,
         cucumber_options: '',
         n: 1
-      }
+      }.freeze
 
       def run(argv)
         options = parse_options!(argv)
