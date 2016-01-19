@@ -17,12 +17,14 @@ module ParallelCucumber
       thread_delay = @options[:thread_delay]
       cucumber_options = @options[:cucumber_options]
       setup_script = @options[:setup_script]
+      teardown_script = @options[:teardown_script]
 
       delay_cmd = thread_delay > 0 ? "sleep #{thread_delay * process_number}" : nil
-      setup_cmd = setup_script.nil? ? nil : setup_script
+
       cucumber_cmd = ['cucumber', cucumber_options, *cucumber_args].compact.join(' ')
 
-      [delay_cmd, setup_cmd, cucumber_cmd].compact.join(' && ')
+      cmd = [delay_cmd, setup_script, cucumber_cmd].compact.join(' && ')
+      teardown_script.nil? ? cmd : "#{cmd}; RET=$?; #{teardown_script}; exit ${RET}"
     end
 
     def execute_command_for_process(process_number, cmd)
