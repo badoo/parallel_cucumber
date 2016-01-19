@@ -40,9 +40,12 @@ module ParallelCucumber
             end
           end
           opts.on('-s', '--setup-script [SCRIPT]', 'Execute SCRIPT before each process') do |script|
-            fail("File '#{script}' does not exist") unless File.exist?(script)
-            fail("File '#{script}' is not executable") unless File.executable?(script)
+            check_script(script)
             options[:setup_script] = File.expand_path(script)
+          end
+          opts.on('-t', '--teardown-script [SCRIPT]', 'Execute SCRIPT after each process') do |script|
+            check_script(script)
+            options[:teardown_script] = File.expand_path(script)
           end
           opts.on('--thread-delay [SECONDS]', Float, 'Delay before next thread starting') do |thread_delay|
             options[:thread_delay] = thread_delay
@@ -65,6 +68,11 @@ module ParallelCucumber
         puts "Unknown option #{e}"
         puts option_parser.help
         exit 1
+      end
+
+      def check_script(path)
+        fail("File '#{path}' does not exist") unless File.exist?(path)
+        fail("File '#{path}' is not executable") unless File.executable?(path)
       end
     end # class
   end # Cli
