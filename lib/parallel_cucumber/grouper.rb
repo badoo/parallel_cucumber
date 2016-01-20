@@ -19,30 +19,10 @@ module ParallelCucumber
         all_runnable_scenarios = distribution_data.map do |feature|
           next if feature['elements'].nil?
           feature['elements'].map do |scenario|
-            if scenario['keyword'] == 'Scenario'
-              {
-                line: "#{feature['uri']}:#{scenario['line']}",
-                weight: 1
-              }
-            elsif scenario['keyword'] == 'Scenario Outline'
-              if scenario['examples']
-                scenario['examples'].map do |example|
-                  examples_count = example['rows'].count - 1 # Do not count the first row with column names
-                  next unless examples_count > 0
-                  {
-                    line: "#{feature['uri']}:#{example['line']}",
-                    weight: examples_count
-                  }
-                end
-              else # Cucumber 1.3 with -x/--expand or Cucumber > 2.0
-                {
-                  line: "#{feature['uri']}:#{scenario['line']}",
-                  weight: 1
-                }
-              end
-            end
+            "#{feature['uri']}:#{scenario['line']}" if ['Scenario', 'Scenario Outline'].include?(scenario['keyword'])
           end
         end.flatten.compact
+
         group_creator(group_size, all_runnable_scenarios)
       end
 
@@ -89,14 +69,14 @@ module ParallelCucumber
         expand_next = false
         options.split.map do |option|
           case
-          when %w(-p --profile).include?(option)
-            expand_next = true
-            next
-          when expand_next
-            expand_next = false
-            _expand_profiles(config[option], config)
-          else
-            option
+            when %w(-p --profile).include?(option)
+              expand_next = true
+              next
+            when expand_next
+              expand_next = false
+              _expand_profiles(config[option], config)
+            else
+              option
           end
         end.compact.join(' ')
       end
@@ -104,10 +84,9 @@ module ParallelCucumber
       def group_creator(groups_count, tasks)
         groups = Array.new(groups_count) { [] }
 
-        sorted_tasks = tasks.sort { |t1, t2| t2[:weight] <=> t1[:weight] }
-        sorted_tasks.each do |task|
+        tasks.each do |task|
           group = groups.min_by(&:size)
-          group.push(task[:line], *Array.new(task[:weight] - 1))
+          group.push(task)
         end
         groups.reject(&:empty?).map(&:compact)
       end
