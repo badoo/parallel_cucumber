@@ -1,0 +1,18 @@
+PreCommit:
+  BundleCheck:
+    enabled: true
+
+  RuboCop:
+    enabled: true
+    command: ['bundle', 'exec', 'rubocop']
+    on_warn: fail
+    include:
+      - '**/*.gemspec'
+      - '**/*.rb'
+      - '**/Gemfile'
+
+  TrailingWhitespace:
+    enabled: true
+
+  YamlSyntax:
+    enabled: true
