@@ -27,7 +27,13 @@ module ParallelCucumber
             'Usage: parallel_cucumber [options] [ [FILE|DIR|URL][:LINE[:LINE]*] ]',
             'Example: parallel_cucumber -n 4 -o "-f pretty -f html -o report.html" examples/i18n/en/features'
           ].join("\n")
-          opts.on('-n [PROCESSES]', Integer, 'How many processes to use') { |n| options[:n] = n }
+          opts.on('-n [PROCESSES]', Integer, 'How many processes to use') do |n|
+            if n < 1
+              puts "The minimum number of processes is 1 but given: '#{n}'"
+              exit 1
+            end
+            options[:n] = n
+          end
           opts.on('-o', '--cucumber-options "[OPTIONS]"', 'Run cucumber with these options') do |cucumber_options|
             options[:cucumber_options] = cucumber_options
           end
