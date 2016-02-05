@@ -77,8 +77,8 @@ module ParallelCucumber
       end
 
       def check_script(path)
-        fail("File '#{path}' does not exist") unless File.exist?(path)
-        fail("File '#{path}' is not executable") unless File.executable?(path)
+        raise("File '#{path}' does not exist") unless File.exist?(path)
+        raise("File '#{path}' is not executable") unless File.executable?(path)
       end
     end # class
   end # Cli

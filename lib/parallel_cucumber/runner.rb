@@ -60,7 +60,7 @@ module ParallelCucumber
           [k, value] unless value.nil?
         when NilClass
         else
-          fail("Don't know how to set '#{v}'(#{v.class}) to the environment variable '#{k}'")
+          raise("Don't know how to set '#{v}'(#{v.class}) to the environment variable '#{k}'")
         end
       end.compact.to_h
 
