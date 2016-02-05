@@ -41,7 +41,7 @@ module ParallelCucumber
 
           if status != 0
             cmd = "bundle exec #{cmd}" if ENV['BUNDLE_BIN_PATH']
-            fail("Can't generate dry run report, command exited with #{status}:\n\t#{cmd}\n\t#{stderr}")
+            raise("Can't generate dry run report, command exited with #{status}:\n\t#{cmd}\n\t#{stderr}")
           end
 
           content = File.read(f.path)
@@ -69,14 +69,14 @@ module ParallelCucumber
         expand_next = false
         options.split.map do |option|
           case
-            when %w(-p --profile).include?(option)
-              expand_next = true
-              next
-            when expand_next
-              expand_next = false
-              _expand_profiles(config[option], config)
-            else
-              option
+          when %w(-p --profile).include?(option)
+            expand_next = true
+            next
+          when expand_next
+            expand_next = false
+            _expand_profiles(config[option], config)
+          else
+            option
           end
         end.compact.join(' ')
       end
