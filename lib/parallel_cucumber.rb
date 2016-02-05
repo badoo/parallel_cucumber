@@ -20,7 +20,13 @@ module ParallelCucumber
         on_finish = lambda do |_item, index, _result|
           completed.push(index)
           remaining_threads = ((0...threads).to_a - completed).sort
-          puts "Thread #{index} has finished. Remaining(#{remaining_threads.count}): #{remaining_threads.join(', ')}"
+          message = "Thread #{index} has finished. "
+          message << if remaining_threads.empty?
+                       "Remaining (#{remaining_threads.count}): #{remaining_threads.join(', ')}"
+                     else
+                       'No thread remains'
+                     end
+          puts(message)
         end
 
         test_results = Parallel.map_with_index(
