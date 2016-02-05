@@ -22,9 +22,9 @@ module ParallelCucumber
           remaining_threads = ((0...threads).to_a - completed).sort
           message = "Thread #{index} has finished. "
           message << if remaining_threads.empty?
-                       "Remaining (#{remaining_threads.count}): #{remaining_threads.join(', ')}"
-                     else
                        'No thread remains'
+                     else
+                       "Remaining (#{remaining_threads.count}): #{remaining_threads.join(', ')}"
                      end
           puts(message)
         end
