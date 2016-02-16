@@ -6,4 +6,4 @@ $LOAD_PATH << "#{root}/lib" if File.exist?("#{root}/Gemfile")
 
 require 'parallel_cucumber'
 
-ParallelCucumber::Cli.run(ARGV)
+ParallelCucumber::Cli.new(ARGV).run

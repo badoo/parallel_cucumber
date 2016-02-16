@@ -6,6 +6,7 @@ Gem::Specification.new name, ParallelCucumber::VERSION do |spec|
   spec.authors = 'Alexander Bayandin'
   spec.email = 'a.bayandin@gmail.com'
   spec.summary = 'Run cucumber in parallel'
+  spec.description = 'Our own parallel cucumber with queue and workers'
   spec.homepage = 'https://github.com/bayandin/parallel_cucumber'
   spec.license = 'MIT'
 
@@ -15,6 +16,7 @@ Gem::Specification.new name, ParallelCucumber::VERSION do |spec|
 
   spec.add_runtime_dependency 'cucumber', '~> 2'
   spec.add_runtime_dependency 'parallel', '~> 1.6'
+  spec.add_runtime_dependency 'redis', '~> 3.2'
   spec.add_development_dependency 'overcommit', '~> 0.31'
   spec.add_development_dependency 'rubocop', '~> 0.37'
 end
