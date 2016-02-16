@@ -1,6 +1,9 @@
 ## IDE ##
 .idea/
 
-## DEV ##
+## Dev ##
 parallel_cucumber-*.gem
 *.log
+
+## Redis ##
+redis.sock

@@ -1,59 +1,9 @@
-require 'parallel'
-
 require 'parallel_cucumber/cli'
-require 'parallel_cucumber/grouper'
-require 'parallel_cucumber/result_formatter'
-require 'parallel_cucumber/runner'
+require 'parallel_cucumber/helper/cucumber'
+require 'parallel_cucumber/helper/queue'
+require 'parallel_cucumber/helper/utils'
+require 'parallel_cucumber/logger'
+require 'parallel_cucumber/main'
+require 'parallel_cucumber/status'
 require 'parallel_cucumber/version'
-
-module ParallelCucumber
-  class << self
-    def run_tests_in_parallel(options)
-      number_of_processes = options[:n]
-      test_results = nil
-
-      report_time_taken do
-        groups = Grouper.feature_groups(options, number_of_processes)
-        threads = groups.size
-        completed = []
-
-        on_finish = lambda do |_item, index, _result|
-          completed.push(index)
-          remaining_threads = ((0...threads).to_a - completed).sort
-          message = "Thread #{index} has finished. "
-          message << if remaining_threads.empty?
-                       'No thread remains'
-                     else
-                       "Remaining (#{remaining_threads.count}): #{remaining_threads.join(', ')}"
-                     end
-          puts(message)
-        end
-
-        test_results = Parallel.map_with_index(
-          groups,
-          in_threads: threads,
-          finish: on_finish
-        ) do |group, index|
-          Runner.new(options).run_tests(index, group)
-        end
-        puts 'All threads are complete'
-        ResultFormatter.report_results(test_results)
-      end
-      exit(1) if any_test_failed?(test_results)
-    end
-
-    private
-
-    def any_test_failed?(test_results)
-      test_results.any? { |result| result[:exit_status] != 0 }
-    end
-
-    def report_time_taken
-      start = Time.now
-      yield
-      time_in_sec = Time.now - start
-      mm, ss = time_in_sec.divmod(60)
-      puts "\nTook #{mm} Minutes, #{ss.round(2)} Seconds"
-    end
-  end # class
-end # ParallelCucumber
+require 'parallel_cucumber/worker'
