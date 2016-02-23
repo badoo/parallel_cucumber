@@ -1,5 +1,6 @@
 require 'json'
 require 'optparse'
+require 'date'
 
 module ParallelCucumber
   class Cli
@@ -9,7 +10,7 @@ module ParallelCucumber
       debug: false,
       env_variables: {},
       n: 1,
-      queue_connection_params: %w(redis://127.0.0.1:6379 queue),
+      queue_connection_params: ['redis://127.0.0.1:6379', DateTime.now.strftime('queue-%Y%m%d%H%M%S')],
       worker_delay: 0
     }.freeze
 
@@ -54,6 +55,11 @@ module ParallelCucumber
 
         opts.on('-o', '--cucumber-options "[OPTIONS]"', 'Run cucumber with these options') do |cucumber_options|
           options[:cucumber_options] = cucumber_options
+        end
+
+        options[:test_command] = 'cucumber'
+        opts.on('--test-command "command"', 'Command to run for test phase, if not cucumber') do |test_command|
+          options[:test_command] = test_command
         end
 
         opts.on('-e', '--env-variables [JSON]', 'Set additional environment variables to processes') do |env_vars|

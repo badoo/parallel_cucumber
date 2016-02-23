@@ -8,6 +8,7 @@ module ParallelCucumber
     def initialize(options, index)
       @batch_size = options[:batch_size]
       @cucumber_options = options[:cucumber_options]
+      @test_command = options[:test_command]
       @env_variables = options[:env_variables]
       @index = index
       @queue_connection_params = options[:queue_connection_params]
@@ -62,7 +63,7 @@ module ParallelCucumber
 
           batch_mm, batch_ss = time_it do
             Tempfile.open(["w-#{@index}", '.json']) do |f|
-              cmd = "cucumber --format pretty --format json --out #{f.path} #{@cucumber_options} #{tests.join(' ')}"
+              cmd = "#{@test_command} --format pretty --format json --out #{f.path} #{@cucumber_options} #{tests.join(' ')}"
               exec_command({ :TEST_BATCH_ID.to_s => batch_id }.merge(env), cmd, log_file)
               f.close
 
@@ -105,13 +106,29 @@ module ParallelCucumber
 
     private
 
+    def file_append(filename, message)
+      File.open(filename, 'a') { |f| f << "\n#{message}\n\n"}
+    end
+
     def exec_command(env, script, log_file)
-      full_script = "#{script} 2>&1 >> #{log_file}"
+      full_script = "#{script} >>#{log_file} 2>&1"
       message = <<-LOG
         Running command `#{full_script}` with environment variables: #{env.map { |k, v| "#{k}=#{v}" }.join(' ')}
       LOG
       @logger.debug(message)
-      Process.wait(IO.popen(env, full_script).pid)
+      file_append(log_file, message)
+      begin
+        Process.wait(IO.popen(env, full_script).pid)
+      rescue StandardError => e
+        @logger.error("Threw: #{e} for #{full_script}")
+        raise
+      end
+      completed = "Command completed with exit #{$CHILD_STATUS}"
+      @logger.debug(completed)
+      file_append(log_file, completed)
+      unless $CHILD_STATUS.success?
+        puts "TAIL OF #{log_file}\n\n#{%x(tail -20 #{log_file})}\n\nENDS\n"
+      end
       $CHILD_STATUS.success?
     end
   end
