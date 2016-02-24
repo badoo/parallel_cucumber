@@ -32,7 +32,7 @@ module ParallelCucumber
       @logger.info("Adding #{tests.count} tests to Queue")
       queue.enqueue(tests)
 
-      number_of_workers = [@options[:n], tests.count].min
+      number_of_workers = [@options[:n], [1, tests.count/@options[:batch_size].to_i].max].min
       unless number_of_workers == @options[:n]
         @logger.info(<<-LOG)
           Number of workers was overridden to #{number_of_workers}.
@@ -94,10 +94,9 @@ module ParallelCucumber
         end
       end.compact.to_h
 
-      {
-        TEST: 1,
-        TEST_PROCESS_NUMBER: worker_number
-      }.merge(env).map { |k, v| [k.to_s, v.to_s] }.to_h
+      env.merge!(TEST: 1, TEST_PROCESS_NUMBER: worker_number)
+
+      env.merge(PARALLEL_CUCUMBER_EXPORTS: env.keys.join(',')).map { |k, v| [k.to_s, v.to_s] }.to_h
     end
   end
 end

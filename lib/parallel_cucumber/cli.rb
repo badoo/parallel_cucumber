@@ -67,7 +67,7 @@ module ParallelCucumber
             JSON.parse(env_vars)
           rescue JSON::ParserError
             puts 'Additional environment variables not in JSON format. And do not forget to escape quotes'
-            exit 1
+            raise
           end
         end
 
