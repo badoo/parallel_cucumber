@@ -52,6 +52,13 @@ module ParallelCucumber
           tests = []
           batch_results = {}
           @batch_size.times do
+            # TODO: Handle recovery of dequeued tests, if a worker dies mid-processing.
+            # For example: use MULTI/EXEC to move the end of the queue into a hash keyed by the worker, with enough
+            # TCP information to allow someone else to check whether such a worker is still live.
+            # If a worker sees the queue is empty, it should check that all workers mentioned in the hash are still
+            # live, and atomically shift an unresponsive worker's tasks back to the queue.
+            # A worker deletes its keyed information from the hash once the task is complete, unless it sees that
+            # someone decided that it was dead, whereupon it should report failure.
             tests << queue.dequeue
           end
           tests.compact!
@@ -62,13 +69,22 @@ module ParallelCucumber
           @logger.info("Taking #{tests.count} tests from the Queue: #{tests.join(' ')}")
 
           batch_mm, batch_ss = time_it do
-            Tempfile.open(["w-#{@index}", '.json']) do |f|
+            Tempfile.open(["w-#{@index}", '.json'], tmpdir='/tmp') do |f|
               cmd = "#{@test_command} --format pretty --format json --out #{f.path} #{@cucumber_options} #{tests.join(' ')}"
-              exec_command({ :TEST_BATCH_ID.to_s => batch_id }.merge(env), cmd, log_file)
+              exec_command({ :TEST_BATCH_ID.to_s => batch_id, :TEST_JSON_FILE.to_s => f.path }.merge(env), cmd, log_file)
               f.close
 
               json_report = File.read(f.path)
-              batch_results = Helper::Cucumber.parse_json_report(json_report)
+
+              begin
+                raise 'Results file was empty' if json_report.empty?
+                batch_results = Helper::Cucumber.parse_json_report(json_report)
+              rescue => e
+                trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$!}#{e.class ? " (#{e.class})" : ''}\n\t")
+                @logger.error("Threw: JSON parse of results caused #{trace}")
+              ensure
+                batch_results ||= {}
+              end
             end
 
             batch_info = Status.constants.map do |status|
@@ -110,26 +126,30 @@ module ParallelCucumber
       File.open(filename, 'a') { |f| f << "\n#{message}\n\n"}
     end
 
+    def dual_log(log_file, message)
+      @logger.debug(message)
+      file_append(log_file, message)
+    end
+
     def exec_command(env, script, log_file)
       full_script = "#{script} >>#{log_file} 2>&1"
       message = <<-LOG
         Running command `#{full_script}` with environment variables: #{env.map { |k, v| "#{k}=#{v}" }.join(' ')}
       LOG
-      @logger.debug(message)
-      file_append(log_file, message)
+      dual_log(log_file, message)
       begin
-        Process.wait(IO.popen(env, full_script).pid)
+        out, status = Open3.capture2e(env, full_script)
+        completed = "Command completed with exit #{status} and output '#{out}'"
+        dual_log(log_file, completed)
+        unless status.success?
+          puts "TAIL OF #{log_file}\n\n#{%x(tail -20 #{log_file})}\n\nENDS\n"
+        end
+        return status.success?
       rescue StandardError => e
-        @logger.error("Threw: #{e} for #{full_script}")
-        raise
+        trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$!}#{e.class ? " (#{e.class})" : ''}\n\t")
+        @logger.error("Threw: for #{full_script}, caused #{trace}")
+        return false
       end
-      completed = "Command completed with exit #{$CHILD_STATUS}"
-      @logger.debug(completed)
-      file_append(log_file, completed)
-      unless $CHILD_STATUS.success?
-        puts "TAIL OF #{log_file}\n\n#{%x(tail -20 #{log_file})}\n\nENDS\n"
-      end
-      $CHILD_STATUS.success?
     end
   end
 end
