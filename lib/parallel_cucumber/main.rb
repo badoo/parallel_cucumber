@@ -32,7 +32,12 @@ module ParallelCucumber
       @logger.info("Adding #{tests.count} tests to Queue")
       queue.enqueue(tests)
 
-      number_of_workers = [@options[:n], [1, tests.count/@options[:batch_size].to_i].max].min
+      if @options[:n] == 0
+        @options[:n] = [1, @options[:env_variables].map { |_k, v| v.respond_to? :size && v.size}].flatten.max
+        @logger.info("Inferred worker count #{@options[:n]} from env_variables option")
+      end
+
+      number_of_workers = [@options[:n], 1].min
       unless number_of_workers == @options[:n]
         @logger.info(<<-LOG)
           Number of workers was overridden to #{number_of_workers}.
@@ -94,8 +99,10 @@ module ParallelCucumber
         end
       end.compact.to_h
 
-      env.merge!(TEST: 1, TEST_PROCESS_NUMBER: worker_number)
+      # Defaults, if absent in env. Shame 'merge' isn't something non-commutative like 'adopts/defaults'.
+      env = { TEST: 1, TEST_PROCESS_NUMBER: worker_number }.merge(env)
 
+      # Overwrite this if it exists in env.
       env.merge(PARALLEL_CUCUMBER_EXPORTS: env.keys.join(',')).map { |k, v| [k.to_s, v.to_s] }.to_h
     end
   end

@@ -9,7 +9,7 @@ module ParallelCucumber
       cucumber_options: '',
       debug: false,
       env_variables: {},
-      n: 1,
+      n: 0,   # Default: computed from longest list in json parameters, minimum 1.
       queue_connection_params: ['redis://127.0.0.1:6379', DateTime.now.strftime('queue-%Y%m%d%H%M%S')],
       worker_delay: 0
     }.freeze
@@ -45,7 +45,7 @@ module ParallelCucumber
           'Example: parallel_cucumber -n 4 -o "-f pretty -f html -o report.html" examples/i18n/en/features'
         ].join("\n")
 
-        opts.on('-n [WORKERS]', Integer, "How many workers to use. Default is #{DEFAULTS[:n]}") do |n|
+        opts.on('-n [WORKERS]', Integer, 'How many workers to use. Default is 1 or longest list in -e') do |n|
           if n < 1
             puts "The minimum number of processes is 1 but given: '#{n}'"
             exit 1
@@ -66,7 +66,7 @@ module ParallelCucumber
           options[:env_variables] = begin
             JSON.parse(env_vars)
           rescue JSON::ParserError
-            puts 'Additional environment variables not in JSON format. And do not forget to escape quotes'
+            puts 'Additional environment variables not in JSON format. Did you forget to escape the quotes?'
             raise
           end
         end
