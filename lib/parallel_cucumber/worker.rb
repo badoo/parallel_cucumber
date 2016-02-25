@@ -1,5 +1,6 @@
 require 'English'
 require 'tempfile'
+require 'timeout'
 
 module ParallelCucumber
   class Worker
@@ -7,6 +8,7 @@ module ParallelCucumber
 
     def initialize(options, index)
       @batch_size = options[:batch_size]
+      @batch_timeout = options[:batch_timeout]
       @cucumber_options = options[:cucumber_options]
       @test_command = options[:test_command]
       @env_variables = options[:env_variables]
@@ -69,22 +71,18 @@ module ParallelCucumber
           @logger.info("Taking #{tests.count} tests from the Queue: #{tests.join(' ')}")
 
           batch_mm, batch_ss = time_it do
-            Tempfile.open(["w-#{@index}", '.json'], tmpdir='/tmp') do |f|
-              cmd = "#{@test_command} --format pretty --format json --out #{f.path} #{@cucumber_options} #{tests.join(' ')}"
-              exec_command({ :TEST_BATCH_ID.to_s => batch_id, :TEST_JSON_FILE.to_s => f.path }.merge(env), cmd, log_file)
+            Tempfile.open(["w-#{@index}", '.json'], '/tmp') do |f|
+              cmd = "#{@test_command} --format pretty --format json --out #{f.path} " \
+                    "#{@cucumber_options} #{tests.join(' ')}"
+              res = exec_command(
+                { :TEST_BATCH_ID.to_s => batch_id, :TEST_JSON_FILE.to_s => f.path }.merge(env),
+                cmd, log_file, @batch_timeout)
               f.close
-
-              json_report = File.read(f.path)
-
-              begin
-                raise 'Results file was empty' if json_report.empty?
-                batch_results = Helper::Cucumber.parse_json_report(json_report)
-              rescue => e
-                trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$!}#{e.class ? " (#{e.class})" : ''}\n\t")
-                @logger.error("Threw: JSON parse of results caused #{trace}")
-              ensure
-                batch_results ||= {}
-              end
+              batch_results = if res.nil?
+                                Hash[tests.map { |t| [t, Status::UNKNOWN] }]
+                              else
+                                parse_results(f)
+                              end
             end
 
             batch_info = Status.constants.map do |status|
@@ -120,10 +118,22 @@ module ParallelCucumber
       results
     end
 
+    def parse_results(f)
+      begin
+        json_report = File.read(f.path)
+        raise 'Results file was empty' if json_report.empty?
+        return Helper::Cucumber.parse_json_report(json_report)
+      rescue => e
+        trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
+        @logger.error("Threw: JSON parse of results caused #{trace}")
+      end
+      {}
+    end
+
     private
 
     def file_append(filename, message)
-      File.open(filename, 'a') { |f| f << "\n#{message}\n\n"}
+      File.open(filename, 'a') { |f| f << "\n#{message}\n\n" }
     end
 
     def dual_log(log_file, message)
@@ -131,24 +141,42 @@ module ParallelCucumber
       file_append(log_file, message)
     end
 
-    def exec_command(env, script, log_file)
+    def exec_command(env, script, log_file, timeout = 30)
       full_script = "#{script} >>#{log_file} 2>&1"
       message = <<-LOG
         Running command `#{full_script}` with environment variables: #{env.map { |k, v| "#{k}=#{v}" }.join(' ')}
       LOG
       dual_log(log_file, message)
+
+      pipe = nil
       begin
-        out, status = Open3.capture2e(env, full_script)
-        completed = "Command completed with exit #{status} and output '#{out}'"
-        dual_log(log_file, completed)
-        unless status.success?
-          puts "TAIL OF #{log_file}\n\n#{%x(tail -20 #{log_file})}\n\nENDS\n"
+        Timeout.timeout(timeout) do
+          out, status = Open3.capture2e(env, full_script)
+          completed = "Command completed with exit #{status} and output '#{out}'"
+          dual_log(log_file, completed)
+          unless status.success?
+            puts "TAIL OF #{log_file}\n\n#{`tail -20 #{log_file}`}\n\nENDS\n"
+          end
+          return status.success?
         end
-        return status.success?
-      rescue StandardError => e
-        trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$!}#{e.class ? " (#{e.class})" : ''}\n\t")
+      rescue Timeout::Error
+        @logger.error("Timeout #{timeout} seconds was reached. Trying to kill the process with SIGINT(2)")
+        begin
+          Timeout.timeout(10) do
+            Process.kill(2, pipe.pid)
+            Process.wait(pipe.pid) # We need to collect status so it doesn't stick around as zombie process
+            return nil
+          end
+        rescue Timeout::Error
+          @logger.error('Process has survived after SIGINT(2). Finishing him with SIGKILL(9). Fatality!')
+          Process.kill(9, pipe.pid)
+          Process.wait(pipe.pid)
+          return nil
+        end
+      rescue => e
+        trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
         @logger.error("Threw: for #{full_script}, caused #{trace}")
-        return false
+        return nil
       end
     end
   end
