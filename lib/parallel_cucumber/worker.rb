@@ -97,7 +97,7 @@ module ParallelCucumber
 
             unless tests.count == batch_results.count
               @logger.error(<<-LOG)
-#{tests.count} tests were taken from Queue, but #{batch_results.count} were run:
+                #{tests.count} tests were taken from Queue, but #{batch_results.count} were run:
                 #{((tests - batch_results.keys) + (batch_results.keys - tests)).join(' ')}
               LOG
             end
