@@ -33,11 +33,11 @@ module ParallelCucumber
       queue.enqueue(tests)
 
       if @options[:n] == 0
-        @options[:n] = [1, @options[:env_variables].map { |_k, v| v.respond_to? :size && v.size}].flatten.max
+        @options[:n] = [1, @options[:env_variables].map { |_k, v| v.respond_to?(:size) && v.size}].flatten.max
         @logger.info("Inferred worker count #{@options[:n]} from env_variables option")
       end
 
-      number_of_workers = [@options[:n], 1].min
+      number_of_workers = [@options[:n], tests.count].min
       unless number_of_workers == @options[:n]
         @logger.info(<<-LOG)
           Number of workers was overridden to #{number_of_workers}.
