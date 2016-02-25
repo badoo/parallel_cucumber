@@ -1,5 +1,6 @@
 require 'English'
 require 'tempfile'
+require 'timeout'
 
 module ParallelCucumber
   class Worker
@@ -7,6 +8,7 @@ module ParallelCucumber
 
     def initialize(options, index)
       @batch_size = options[:batch_size]
+      @batch_timeout = options[:batch_timeout]
       @cucumber_options = options[:cucumber_options]
       @env_variables = options[:env_variables]
       @index = index
@@ -63,11 +65,14 @@ module ParallelCucumber
           batch_mm, batch_ss = time_it do
             Tempfile.open(["w-#{@index}", '.json']) do |f|
               cmd = "cucumber --format pretty --format json --out #{f.path} #{@cucumber_options} #{tests.join(' ')}"
-              exec_command({ :TEST_BATCH_ID.to_s => batch_id }.merge(env), cmd, log_file)
+              res = exec_command({ :TEST_BATCH_ID.to_s => batch_id }.merge(env), cmd, log_file, @batch_timeout)
               f.close
-
-              json_report = File.read(f.path)
-              batch_results = Helper::Cucumber.parse_json_report(json_report)
+              batch_results = if res.nil?
+                                Hash[tests.map { |t| [t, Status::UNKNOWN] }]
+                              else
+                                json_report = File.read(f.path)
+                                Helper::Cucumber.parse_json_report(json_report)
+                              end
             end
 
             batch_info = Status.constants.map do |status|
@@ -80,7 +85,7 @@ module ParallelCucumber
 
             unless tests.count == batch_results.count
               @logger.error(<<-LOG)
-#{tests.count} tests were taken from Queue, but #{batch_results.count} were run:
+                #{tests.count} tests were taken from Queue, but #{batch_results.count} were run:
                 #{((tests - batch_results.keys) + (batch_results.keys - tests)).join(' ')}
               LOG
             end
@@ -105,13 +110,35 @@ module ParallelCucumber
 
     private
 
-    def exec_command(env, script, log_file)
+    def exec_command(env, script, log_file, timeout = 30)
       full_script = "#{script} 2>&1 >> #{log_file}"
       message = <<-LOG
         Running command `#{full_script}` with environment variables: #{env.map { |k, v| "#{k}=#{v}" }.join(' ')}
       LOG
       @logger.debug(message)
-      Process.wait(IO.popen(env, full_script).pid)
+
+      pipe = nil
+      begin
+        Timeout.timeout(timeout) do
+          pipe = IO.popen(env, full_script)
+          Process.wait(pipe.pid)
+        end
+      rescue Timeout::Error
+        @logger.error("Timeout #{timeout} seconds was reached. Trying to kill the process with SIGINT(2)")
+        begin
+          Timeout.timeout(10) do
+            Process.kill(2, pipe.pid)
+            Process.wait(pipe.pid) # We need to collect status so it doesn't stick around as zombie process
+            return nil
+          end
+        rescue Timeout::Error
+          @logger.error('Process has survived after SIGINT(2). Finishing him with SIGKILL(9). Fatality!')
+          Process.kill(9, pipe.pid)
+          Process.wait(pipe.pid)
+          return nil
+        end
+      end
+
       $CHILD_STATUS.success?
     end
   end

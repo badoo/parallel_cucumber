@@ -5,6 +5,7 @@ module ParallelCucumber
   class Cli
     DEFAULTS = {
       batch_size: 1,
+      batch_timeout: 600,
       cucumber_options: '',
       debug: false,
       env_variables: {},
@@ -75,11 +76,11 @@ module ParallelCucumber
         end
 
         help_message = <<-TEXT
-           `url,name`
-            Url for TCP connection:
-            `redis://[password]@[hostname]:[port]/[db]` (password, port and database are optional),
-            for unix socket connection: `unix://[path to Redis socket]`.
-            Default is redis://127.0.0.1:6379 and name is `queue`
+         `url,name`
+          Url for TCP connection:
+          `redis://[password]@[hostname]:[port]/[db]` (password, port and database are optional),
+          for unix socket connection: `unix://[path to Redis socket]`.
+          Default is redis://127.0.0.1:6379 and name is `queue`
         TEXT
         opts.on('-q', '--queue-connection-params [ARRAY]', Array, help_message.gsub(/\s+/, ' ').strip) do |params|
           options[:queue_connection_params] = params
@@ -94,12 +95,19 @@ module ParallelCucumber
         end
 
         help_message = <<-TEXT
-            Delay before next worker starting.
-            Could be used for avoiding 'spikes' in CPU and RAM usage
-            Default is #{DEFAULTS[:worker_delay]}
+          Delay before next worker starting.
+          Could be used for avoiding 'spikes' in CPU and RAM usage
+          Default is #{DEFAULTS[:worker_delay]}
         TEXT
         opts.on('--worker-delay [SECONDS]', Float, help_message.gsub(/\s+/, ' ').strip) do |worker_delay|
           options[:worker_delay] = worker_delay
+        end
+
+        help_message = <<-TEXT
+          Timeout for each batch of tests. Default is #{DEFAULTS[:batch_timeout]}
+        TEXT
+        opts.on('--batch-timeout [SECONDS]', Float, help_message.gsub(/\s+/, ' ').strip) do |batch_timeout|
+          options[:batch_timeout] = batch_timeout
         end
 
         opts.on('--debug', 'Print more debug information') do |debug|
