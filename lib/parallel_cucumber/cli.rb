@@ -12,7 +12,8 @@ module ParallelCucumber
       env_variables: {},
       n: 0, # Default: computed from longest list in json parameters, minimum 1.
       queue_connection_params: ['redis://127.0.0.1:6379', DateTime.now.strftime('queue-%Y%m%d%H%M%S')],
-      worker_delay: 0
+      worker_delay: 0,
+      test_command: 'cucumber'
     }.freeze
 
     def initialize(argv)
@@ -58,9 +59,13 @@ module ParallelCucumber
           options[:cucumber_options] = cucumber_options
         end
 
-        options[:test_command] = 'cucumber'
-        opts.on('--test-command "command"', 'Command to run for test phase, if not cucumber') do |test_command|
+        opts.on('--test-command [COMMAND]',
+                "Command to run for test phase, default #{DEFAULTS[:test_command]}") do |test_command|
           options[:test_command] = test_command
+        end
+
+        opts.on('--pre-batch-check [COMMAND]', 'Command causing worker to quit on exit failure') do |pre_check|
+          options[:pre_check] = pre_check
         end
 
         opts.on('-e', '--env-variables [JSON]', 'Set additional environment variables to processes') do |env_vars|
