@@ -11,6 +11,7 @@ module ParallelCucumber
       @batch_timeout = options[:batch_timeout]
       @cucumber_options = options[:cucumber_options]
       @test_command = options[:test_command]
+      @pre_check = options[:pre_check] || ''
       @env_variables = options[:env_variables]
       @index = index
       @queue_connection_params = options[:queue_connection_params]
@@ -28,11 +29,6 @@ module ParallelCucumber
       log_file = "worker_#{@index}.log"
       File.delete(log_file) if File.exist?(log_file)
 
-      unless @worker_delay.zero?
-        @logger.info("Waiting #{@worker_delay * @index} seconds before start")
-        sleep(@worker_delay * @index)
-      end
-
       @logger.debug(<<-LOG)
         Additional environment variables: #{env.map { |k, v| "#{k}=#{v}" }.join(' ')}
       LOG
@@ -40,7 +36,7 @@ module ParallelCucumber
       unless @setup_worker.nil?
         mm, ss = time_it do
           @logger.info('Setup running')
-          success = exec_command(env, @setup_worker, log_file)
+          success = Helper::Command.exec_command(env, @setup_worker, log_file, @logger)
           @logger.warn('Setup finished with error') unless success
         end
         @logger.debug("Setup took #{mm} minutes #{ss} seconds")
@@ -52,7 +48,14 @@ module ParallelCucumber
       loop_mm, loop_ss = time_it do
         loop do
           tests = []
-          batch_results = {}
+          unless @pre_check.empty?
+            continue = ParallelCucumber::Helper::Command.exec_command(
+              env, @pre_check, log_file, @logger, @batch_timeout)
+            unless continue
+              @logger.error('Pre-check failed: quitting immediately')
+              exit 1
+            end
+          end
           @batch_size.times do
             # TODO: Handle recovery of dequeued tests, if a worker dies mid-processing.
             # For example: use MULTI/EXEC to move the end of the queue into a hash keyed by the worker, with enough
@@ -71,19 +74,24 @@ module ParallelCucumber
           @logger.info("Taking #{tests.count} tests from the Queue: #{tests.join(' ')}")
 
           batch_mm, batch_ss = time_it do
-            Tempfile.open(["w-#{@index}", '.json'], '/tmp') do |f|
-              cmd = "#{@test_command} --format pretty --format json --out #{f.path} " \
-                    "#{@cucumber_options} #{tests.join(' ')}"
-              res = exec_command(
-                { :TEST_BATCH_ID.to_s => batch_id, :TEST_JSON_FILE.to_s => f.path }.merge(env),
-                cmd, log_file, @batch_timeout)
-              f.close
-              batch_results = if res.nil?
-                                Hash[tests.map { |t| [t, Status::UNKNOWN] }]
-                              else
-                                parse_results(f)
-                              end
-            end
+            test_batch_dir = "/tmp/w-#{batch_id}"
+            FileUtils.rm_rf(test_batch_dir)
+            FileUtils.mkpath(test_batch_dir)
+            f = "#{test_batch_dir}/test_state.json"
+            cmd = "#{@test_command} --format pretty --format json --out #{f} #{@cucumber_options} "
+            batch_env = { :TEST_BATCH_ID.to_s => batch_id, :TEST_BATCH_DIR.to_s => test_batch_dir }.merge(env)
+            cmd, file_map = Helper::Cucumber.batch_mapped_files(cmd, test_batch_dir, batch_env)
+            file_map.each { |_user, worker| FileUtils.mkpath(worker) if worker =~ %r{\/$} }
+            cmd += ' ' + tests.join(' ')
+            res = ParallelCucumber::Helper::Command.exec_command(batch_env, cmd, log_file, @logger, @batch_timeout)
+            batch_results = if res.nil?
+                              FileUtils.rm_rf(test_batch_dir)
+                              Hash[tests.map { |t| [t, Status::UNKNOWN] }]
+                            else
+                              p 'FILE MAP', file_map
+                              file_map.each { |user, worker| FileUtils.cp_r(worker, user) unless worker == user }
+                              parse_results(f)
+                            end
 
             batch_info = Status.constants.map do |status|
               status = Status.const_get(status)
@@ -109,7 +117,7 @@ module ParallelCucumber
       unless @teardown_worker.nil?
         mm, ss = time_it do
           @logger.info('Teardown running')
-          success = exec_command(env, @teardown_worker, log_file)
+          success = ParallelCucumber::Helper::Command.exec_command(env, @teardown_worker, log_file, @logger)
           @logger.warn('Teardown finished with error') unless success
         end
         @logger.debug("Teardown took #{mm} minutes #{ss} seconds")
@@ -120,7 +128,7 @@ module ParallelCucumber
 
     def parse_results(f)
       begin
-        json_report = File.read(f.path)
+        json_report = File.read(f)
         raise 'Results file was empty' if json_report.empty?
         return Helper::Cucumber.parse_json_report(json_report)
       rescue => e
@@ -128,56 +136,6 @@ module ParallelCucumber
         @logger.error("Threw: JSON parse of results caused #{trace}")
       end
       {}
-    end
-
-    private
-
-    def file_append(filename, message)
-      File.open(filename, 'a') { |f| f << "\n#{message}\n\n" }
-    end
-
-    def dual_log(log_file, message)
-      @logger.debug(message)
-      file_append(log_file, message)
-    end
-
-    def exec_command(env, script, log_file, timeout = 30)
-      full_script = "#{script} >>#{log_file} 2>&1"
-      message = <<-LOG
-        Running command `#{full_script}` with environment variables: #{env.map { |k, v| "#{k}=#{v}" }.join(' ')}
-      LOG
-      dual_log(log_file, message)
-
-      pipe = nil
-      begin
-        Timeout.timeout(timeout) do
-          out, status = Open3.capture2e(env, full_script)
-          completed = "Command completed with exit #{status} and output '#{out}'"
-          dual_log(log_file, completed)
-          unless status.success?
-            puts "TAIL OF #{log_file}\n\n#{`tail -20 #{log_file}`}\n\nENDS\n"
-          end
-          return status.success?
-        end
-      rescue Timeout::Error
-        @logger.error("Timeout #{timeout} seconds was reached. Trying to kill the process with SIGINT(2)")
-        begin
-          Timeout.timeout(10) do
-            Process.kill(2, pipe.pid)
-            Process.wait(pipe.pid) # We need to collect status so it doesn't stick around as zombie process
-            return nil
-          end
-        rescue Timeout::Error
-          @logger.error('Process has survived after SIGINT(2). Finishing him with SIGKILL(9). Fatality!')
-          Process.kill(9, pipe.pid)
-          Process.wait(pipe.pid)
-          return nil
-        end
-      rescue => e
-        trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
-        @logger.error("Threw: for #{full_script}, caused #{trace}")
-        return nil
-      end
     end
   end
 end

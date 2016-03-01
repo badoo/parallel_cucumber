@@ -32,6 +32,15 @@ module ParallelCucumber
           content
         end
 
+        def batch_mapped_files(options, batch, env)
+          options = options.dup
+          options = expand_profiles(options, env) unless config_file.nil?
+          file_map = {}
+          options.gsub!(/(?:\s|^)--dry-run\s+/, '')
+          options.gsub!(%r{((?:\s|^)(?:--out|-o))\s+((?:\S+\/)?(\S+))}) { "#{$1} #{file_map[$2] = "#{batch}/#{$3}"}" } # rubocop:disable Style/PerlBackrefs, Metrics/LineLength
+          [options, file_map]
+        end
+
         def parse_json_report(json_report)
           report = JSON.parse(json_report)
           report.map do |feature|
@@ -62,9 +71,15 @@ module ParallelCucumber
 
         private
 
-        def expand_profiles(options)
-          config = YAML.load(ERB.new(File.read(config_file)).result)
-          _expand_profiles(options, config)
+        def expand_profiles(options, env = {})
+          e = ENV.to_h
+          ENV.replace(e.merge(env))
+          begin
+            config = YAML.load(ERB.new(File.read(config_file)).result)
+            _expand_profiles(options, config)
+          ensure
+            ENV.replace(e)
+          end
         end
 
         def config_file
@@ -81,7 +96,7 @@ module ParallelCucumber
         end
 
         def remove_formatters(options)
-          options.gsub(/(--format|-f|--out|-o)\s+[\S]+/, '').gsub(/--dry-run\s+/, '')
+          options.gsub(/(^|\s)(--format|-f|--out|-o)\s+[\S]+/, '\\1').gsub(/(\s|^)--dry-run\s+/, '\\1')
         end
       end
     end

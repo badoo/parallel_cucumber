@@ -59,6 +59,10 @@ module ParallelCucumber
       info = {}
       total_mm, total_ss = time_it do
         results = Parallel.map(0...number_of_workers, in_processes: number_of_workers) do |index|
+          unless @options[:worker_delay] == 0
+            @logger.info("Waiting #{@options[:worker_delay] * index} seconds before start")
+            sleep(@options[:worker_delay] * index)
+          end
           Worker.new(@options, index).start(env_for_worker(@options[:env_variables], index))
         end.inject(:merge)
 
