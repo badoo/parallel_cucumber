@@ -85,13 +85,14 @@ module ParallelCucumber
             cmd += ' ' + tests.join(' ')
             res = ParallelCucumber::Helper::Command.exec_command(batch_env, cmd, log_file, @logger, @batch_timeout)
             batch_results = if res.nil?
-                              FileUtils.rm_rf(test_batch_dir)
                               Hash[tests.map { |t| [t, Status::UNKNOWN] }]
                             else
                               p 'FILE MAP', file_map
-                              file_map.each { |user, worker| FileUtils.cp_r(worker, user) unless worker == user }
+                              # Using system cp -r because Ruby's has crap diagnostics in weird situations.
+                              file_map.each { |user, worker| system "cp -r #{worker} #{user}" unless worker == user }
                               parse_results(f)
                             end
+            FileUtils.rm_rf(test_batch_dir)
 
             batch_info = Status.constants.map do |status|
               status = Status.const_get(status)
