@@ -5,16 +5,16 @@ module ParallelCucumber
         def ps_tree
           ` ps -ax -o ppid= -o pid= -o lstart= -o command= `
             .each_line.map { |l| l.strip.split(/ +/, 3) }.to_a
-            .each_with_object({}) do |tree, (ppid, pid, signature)|
+            .each_with_object({}) do |(ppid, pid, signature), tree|
             (tree[pid] ||= { children: [] })[:signature] = signature
             (tree[ppid] ||= { children: [] })[:children] << pid
-            tree
           end
         end
 
         def kill_tree(sig, root, tree = nil, old_tree = nil)
           descendants(root, tree, old_tree) do |pid|
             begin
+              puts(sig, pid.to_i)
               Process.kill(sig, pid.to_i)
             rescue Errno::ESRCH
               nil # It's gone already? Hurrah!
