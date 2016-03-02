@@ -87,9 +87,10 @@ module ParallelCucumber
             batch_results = if res.nil?
                               Hash[tests.map { |t| [t, Status::UNKNOWN] }]
                             else
-                              p 'FILE MAP', file_map
                               # Using system cp -r because Ruby's has crap diagnostics in weird situations.
-                              file_map.each { |user, worker| system "cp -r #{worker} #{user}" unless worker == user }
+                              file_map.each do |user, worker|
+                                system "find #{worker} ; cp -r #{worker} #{user}" unless worker == user
+                              end
                               parse_results(f)
                             end
             FileUtils.rm_rf(test_batch_dir)
