@@ -33,7 +33,7 @@ module ParallelCucumber
       queue.enqueue(tests)
 
       if @options[:n] == 0
-        @options[:n] = [1, @options[:env_variables].map { |_k, v| v.respond_to?(:size) && v.size }].flatten.max
+        @options[:n] = [1, @options[:env_variables].map { |_k, v| v.respond_to?(:count) && v.count }].flatten.max
         @logger.info("Inferred worker count #{@options[:n]} from env_variables option")
       end
 
