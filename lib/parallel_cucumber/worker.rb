@@ -137,14 +137,12 @@ module ParallelCucumber
     end
 
     def parse_results(f)
-      begin
-        json_report = File.read(f)
-        raise 'Results file was empty' if json_report.empty?
-        return Helper::Cucumber.parse_json_report(json_report)
-      rescue => e
-        trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
-        @logger.error("Threw: JSON parse of results caused #{trace}")
-      end
+      json_report = File.read(f)
+      raise 'Results file was empty' if json_report.empty?
+      Helper::Cucumber.parse_json_report(json_report)
+    rescue => e
+      trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
+      @logger.error("Threw: JSON parse of results caused #{trace}")
       {}
     end
   end
