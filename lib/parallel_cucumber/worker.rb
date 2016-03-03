@@ -89,7 +89,10 @@ module ParallelCucumber
                             else
                               # Using system cp -r because Ruby's has crap diagnostics in weird situations.
                               file_map.each do |user, worker|
-                                system "find #{worker} ; cp -r #{worker} #{user}" unless worker == user
+                                unless worker == user
+                                  fail = `cp -r #{worker} #{user} 2>&1`
+                                  @logger.error("Copy of #{worker} to #{user} said: #{fail}") unless fail.empty?
+                                end
                               end
                               parse_results(f)
                             end
@@ -105,8 +108,8 @@ module ParallelCucumber
 
             unless tests.count == batch_results.count
               @logger.error(<<-LOG)
-                #{tests.count} tests were taken from Queue, but #{batch_results.count} were run:
-                #{((tests - batch_results.keys) + (batch_results.keys - tests)).join(' ')}
+                #{tests.count} tests were taken from Queue, but #{batch_results.count} ran:
+                #{((tests - batch_results.keys) + (batch_results.keys - tests)).join(', ')}.
               LOG
             end
             results.merge!(batch_results)
