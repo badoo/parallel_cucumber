@@ -7,3 +7,4 @@ parallel_cucumber-*.gem
 
 ## Redis ##
 redis.sock
+dump.rdb
