@@ -11,7 +11,7 @@ module ParallelCucumber
       @batch_timeout = options[:batch_timeout]
       @cucumber_options = options[:cucumber_options]
       @test_command = options[:test_command]
-      @pre_check = options[:pre_check] || ''
+      @pre_check = options[:pre_check]
       @env_variables = options[:env_variables]
       @index = index
       @queue_connection_params = options[:queue_connection_params]
@@ -29,11 +29,16 @@ module ParallelCucumber
       log_file = "worker_#{@index}.log"
       File.delete(log_file) if File.exist?(log_file)
 
+      unless @worker_delay.zero?
+        @logger.info("Waiting #{@worker_delay * @index} seconds before start")
+        sleep(@worker_delay * @index)
+      end
+
       @logger.debug(<<-LOG)
         Additional environment variables: #{env.map { |k, v| "#{k}=#{v}" }.join(' ')}
       LOG
 
-      unless @setup_worker.nil?
+      if @setup_worker
         mm, ss = time_it do
           @logger.info('Setup running')
           success = Helper::Command.exec_command(env, @setup_worker, log_file, @logger)
@@ -48,7 +53,7 @@ module ParallelCucumber
       loop_mm, loop_ss = time_it do
         loop do
           tests = []
-          unless @pre_check.empty?
+          if @pre_check
             continue = ParallelCucumber::Helper::Command.exec_command(
               env, @pre_check, log_file, @logger, @batch_timeout)
             unless continue
@@ -119,7 +124,7 @@ module ParallelCucumber
       end
       @logger.debug("Loop took #{loop_mm} minutes #{loop_ss} seconds")
 
-      unless @teardown_worker.nil?
+      if @teardown_worker
         mm, ss = time_it do
           @logger.info('Teardown running')
           success = ParallelCucumber::Helper::Command.exec_command(env, @teardown_worker, log_file, @logger)
