@@ -36,10 +36,7 @@ module ParallelCucumber
             dual.log(completed)
             system("lsof #{log_file} >> #{log_file}")
             system("ps -axf | grep '#{pstat[:pid]}\\s' >> #{log_file}")
-            return true if pstat.value.success?
-
-            puts "TAIL OF #{log_file}\n\n#{`tail -20 #{log_file}`}\n\nENDS\n"
-            return false
+            return pstat.value.success?
           rescue Timeout::Error
             pout.close
             dual.log("Timeout, so trying SIGINT #{pstat[:pid]}")
