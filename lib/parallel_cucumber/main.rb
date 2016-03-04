@@ -8,7 +8,7 @@ module ParallelCucumber
       @options = options
 
       @logger = ParallelCucumber::CustomLogger.new(STDOUT)
-      @logger.progname = 'Main'
+      @logger.progname = 'Primary' # Longer than 'Main', to make the log file pretty.
       @logger.level = options[:debug] ? ParallelCucumber::CustomLogger::DEBUG : ParallelCucumber::CustomLogger::INFO
     end
 
@@ -31,6 +31,11 @@ module ParallelCucumber
 
       @logger.info("Adding #{tests.count} tests to Queue")
       queue.enqueue(tests)
+
+      if @options[:n] == 0
+        @options[:n] = [1, @options[:env_variables].map { |_k, v| v.respond_to?(:count) && v.count }].flatten.max
+        @logger.info("Inferred worker count #{@options[:n]} from env_variables option")
+      end
 
       number_of_workers = [@options[:n], tests.count].min
       unless number_of_workers == @options[:n]
@@ -94,10 +99,11 @@ module ParallelCucumber
         end
       end.compact.to_h
 
-      {
-        TEST: 1,
-        TEST_PROCESS_NUMBER: worker_number
-      }.merge(env).map { |k, v| [k.to_s, v.to_s] }.to_h
+      # Defaults, if absent in env. Shame 'merge' isn't something non-commutative like 'adopts/defaults'.
+      env = { TEST: 1, TEST_PROCESS_NUMBER: worker_number }.merge(env)
+
+      # Overwrite this if it exists in env.
+      env.merge(PARALLEL_CUCUMBER_EXPORTS: env.keys.join(',')).map { |k, v| [k.to_s, v.to_s] }.to_h
     end
   end
 end
