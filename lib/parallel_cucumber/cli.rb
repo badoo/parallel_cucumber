@@ -1,16 +1,19 @@
 require 'json'
 require 'optparse'
+require 'date'
 
 module ParallelCucumber
   class Cli
     DEFAULTS = {
       batch_size: 1,
+      batch_timeout: 600,
       cucumber_options: '',
       debug: false,
       env_variables: {},
-      n: 1,
-      queue_connection_params: %w(redis://127.0.0.1:6379 queue),
-      worker_delay: 0
+      n: 0, # Default: computed from longest list in json parameters, minimum 1.
+      queue_connection_params: ['redis://127.0.0.1:6379', DateTime.now.strftime('queue-%Y%m%d%H%M%S')],
+      worker_delay: 0,
+      test_command: 'cucumber'
     }.freeze
 
     def initialize(argv)
@@ -44,7 +47,7 @@ module ParallelCucumber
           'Example: parallel_cucumber -n 4 -o "-f pretty -f html -o report.html" examples/i18n/en/features'
         ].join("\n")
 
-        opts.on('-n [WORKERS]', Integer, "How many workers to use. Default is #{DEFAULTS[:n]}") do |n|
+        opts.on('-n WORKERS', Integer, 'How many workers to use. Default is 1 or longest list in -e') do |n|
           if n < 1
             puts "The minimum number of processes is 1 but given: '#{n}'"
             exit 1
@@ -52,21 +55,30 @@ module ParallelCucumber
           options[:n] = n
         end
 
-        opts.on('-o', '--cucumber-options "[OPTIONS]"', 'Run cucumber with these options') do |cucumber_options|
+        opts.on('-o', '--cucumber-options "OPTIONS"', 'Run cucumber with these options') do |cucumber_options|
           options[:cucumber_options] = cucumber_options
         end
 
-        opts.on('-e', '--env-variables [JSON]', 'Set additional environment variables to processes') do |env_vars|
+        opts.on('--test-command COMMAND',
+                "Command to run for test phase, default #{DEFAULTS[:test_command]}") do |test_command|
+          options[:test_command] = test_command
+        end
+
+        opts.on('--pre-batch-check COMMAND', 'Command causing worker to quit on exit failure') do |pre_check|
+          options[:pre_check] = pre_check
+        end
+
+        opts.on('-e', '--env-variables JSON', 'Set additional environment variables to processes') do |env_vars|
           options[:env_variables] = begin
             JSON.parse(env_vars)
           rescue JSON::ParserError
-            puts 'Additional environment variables not in JSON format. And do not forget to escape quotes'
-            exit 1
+            puts 'Additional environment variables not in JSON format. Did you forget to escape the quotes?'
+            raise
           end
         end
 
         help_message = "How many tests each worker takes from queue at once. Default is #{DEFAULTS[:batch_size]}"
-        opts.on('--batch-size [SIZE]', Integer, help_message.gsub(/\s+/, ' ').strip) do |batch_size|
+        opts.on('--batch-size SIZE', Integer, help_message.gsub(/\s+/, ' ').strip) do |batch_size|
           if batch_size < 1
             puts "The minimum batch size is 1 but given: '#{batch_size}'"
             exit 1
@@ -75,31 +87,38 @@ module ParallelCucumber
         end
 
         help_message = <<-TEXT
-           `url,name`
-            Url for TCP connection:
-            `redis://[password]@[hostname]:[port]/[db]` (password, port and database are optional),
-            for unix socket connection: `unix://[path to Redis socket]`.
-            Default is redis://127.0.0.1:6379 and name is `queue`
+         `url,name`
+          Url for TCP connection:
+          `redis://[password]@[hostname]:[port]/[db]` (password, port and database are optional),
+          for unix socket connection: `unix://[path to Redis socket]`.
+          Default is redis://127.0.0.1:6379 and name is `queue`
         TEXT
-        opts.on('-q', '--queue-connection-params [ARRAY]', Array, help_message.gsub(/\s+/, ' ').strip) do |params|
+        opts.on('-q', '--queue-connection-params ARRAY', Array, help_message.gsub(/\s+/, ' ').strip) do |params|
           options[:queue_connection_params] = params
         end
 
-        opts.on('--setup-worker [SCRIPT]', 'Execute SCRIPT before each worker') do |script|
+        opts.on('--setup-worker SCRIPT', 'Execute SCRIPT before each worker') do |script|
           options[:setup_worker] = script
         end
 
-        opts.on('--teardown-worker [SCRIPT]', 'Execute SCRIPT after each worker') do |script|
+        opts.on('--teardown-worker SCRIPT', 'Execute SCRIPT after each worker') do |script|
           options[:teardown_worker] = script
         end
 
         help_message = <<-TEXT
-            Delay before next worker starting.
-            Could be used for avoiding 'spikes' in CPU and RAM usage
-            Default is #{DEFAULTS[:worker_delay]}
+          Delay before next worker starting.
+          Could be used for avoiding 'spikes' in CPU and RAM usage
+          Default is #{DEFAULTS[:worker_delay]}
         TEXT
-        opts.on('--worker-delay [SECONDS]', Float, help_message.gsub(/\s+/, ' ').strip) do |worker_delay|
+        opts.on('--worker-delay SECONDS', Float, help_message.gsub(/\s+/, ' ').strip) do |worker_delay|
           options[:worker_delay] = worker_delay
+        end
+
+        help_message = <<-TEXT
+          Timeout for each batch of tests. Default is #{DEFAULTS[:batch_timeout]}
+        TEXT
+        opts.on('--batch-timeout SECONDS', Float, help_message.gsub(/\s+/, ' ').strip) do |batch_timeout|
+          options[:batch_timeout] = batch_timeout
         end
 
         opts.on('--debug', 'Print more debug information') do |debug|
