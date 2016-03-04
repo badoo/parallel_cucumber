@@ -29,6 +29,11 @@ module ParallelCucumber
       tests.shuffle!
       @logger.debug("Generating all tests took #{mm} minutes #{ss} seconds")
 
+      if tests.empty?
+        @logger.error('There are no tests to run')
+        exit(1)
+      end
+
       @logger.info("Adding #{tests.count} tests to Queue")
       queue.enqueue(tests)
 
