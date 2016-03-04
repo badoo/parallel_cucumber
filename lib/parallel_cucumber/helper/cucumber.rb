@@ -66,7 +66,7 @@ module ParallelCucumber
                        end
               { "#{feature['uri']}:#{scenario['line']}".to_sym => status }
             end
-          end.flatten.compact.inject(&:merge)
+          end.flatten.compact.inject(&:merge) || {}
         end
 
         private
