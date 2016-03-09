@@ -72,6 +72,7 @@ module ParallelCucumber
             tests << queue.dequeue
           end
           tests.compact!
+          tests.sort!
           break if tests.empty?
 
           batch_id = "#{Time.now.to_i}-#{@index}"
