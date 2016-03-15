@@ -26,8 +26,12 @@ module ParallelCucumber
         @redis.rpop(@name)
       end
 
+      def length
+        @redis.llen(@name)
+      end
+
       def empty?
-        @redis.llen(@name).zero?
+        length.zero?
       end
     end
   end

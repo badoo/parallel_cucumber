@@ -18,16 +18,19 @@ module ParallelCucumber
       @setup_worker = options[:setup_worker]
       @teardown_worker = options[:teardown_worker]
       @worker_delay = options[:worker_delay]
-
-      @logger = ParallelCucumber::CustomLogger.new(STDOUT)
-      @logger.progname = "Worker #{@index}"
-      @logger.level = options[:debug] ? ParallelCucumber::CustomLogger::DEBUG : ParallelCucumber::CustomLogger::INFO
+      @debug = options[:debug]
     end
 
     def start(env)
-      @logger.info('Starting')
       log_file = "worker_#{@index}.log"
       File.delete(log_file) if File.exist?(log_file)
+      file_handle = File.open(log_file, 'a')
+      file_handle.sync = true
+      @logger = ParallelCucumber::CustomLogger.new(MultiDelegator.delegate(:write, :close).to(STDOUT, file_handle))
+      @logger.progname = "Worker #{@index}"
+      @logger.level = @debug ? ParallelCucumber::CustomLogger::DEBUG : ParallelCucumber::CustomLogger::INFO
+
+      @logger.info("Starting, also logging to #{log_file}")
 
       unless @worker_delay.zero?
         @logger.info("Waiting #{@worker_delay * @index} seconds before start")
@@ -63,12 +66,6 @@ module ParallelCucumber
           end
           @batch_size.times do
             # TODO: Handle recovery of dequeued tests, if a worker dies mid-processing.
-            # For example: use MULTI/EXEC to move the end of the queue into a hash keyed by the worker, with enough
-            # TCP information to allow someone else to check whether such a worker is still live.
-            # If a worker sees the queue is empty, it should check that all workers mentioned in the hash are still
-            # live, and atomically shift an unresponsive worker's tasks back to the queue.
-            # A worker deletes its keyed information from the hash once the task is complete, unless it sees that
-            # someone decided that it was dead, whereupon it should report failure.
             tests << queue.dequeue
           end
           tests.compact!
@@ -77,7 +74,7 @@ module ParallelCucumber
 
           batch_id = "#{Time.now.to_i}-#{@index}"
           @logger.debug("Batch ID is #{batch_id}")
-          @logger.info("Taking #{tests.count} tests from the Queue: #{tests.join(' ')}")
+          @logger.info("Took #{tests.count} from the queue (#{queue.length} left): #{tests.join(' ')}")
 
           batch_mm, batch_ss = time_it do
             test_batch_dir = "/tmp/w-#{batch_id}"
@@ -86,14 +83,15 @@ module ParallelCucumber
             f = "#{test_batch_dir}/test_state.json"
             cmd = "#{@test_command} --format pretty --format json --out #{f} #{@cucumber_options} "
             batch_env = { :TEST_BATCH_ID.to_s => batch_id, :TEST_BATCH_DIR.to_s => test_batch_dir }.merge(env)
-            cmd, file_map = Helper::Cucumber.batch_mapped_files(cmd, test_batch_dir, batch_env)
+            mapped_batch_cmd, file_map = Helper::Cucumber.batch_mapped_files(cmd, test_batch_dir, batch_env)
             file_map.each { |_user, worker| FileUtils.mkpath(worker) if worker =~ %r{\/$} }
-            cmd += ' ' + tests.join(' ')
-            res = ParallelCucumber::Helper::Command.exec_command(batch_env, cmd, log_file, @logger, @batch_timeout)
+            mapped_batch_cmd += ' ' + tests.join(' ')
+            res = ParallelCucumber::Helper::Command.exec_command(
+              batch_env, mapped_batch_cmd, log_file, @logger, @batch_timeout)
             batch_results = if res.nil?
                               Hash[tests.map { |t| [t, Status::UNKNOWN] }]
                             else
-                              # Using system cp -r because Ruby's has crap diagnostics in weird situations.
+                              # Use system cp -r because Ruby's has crap diagnostics in weird situations.
                               file_map.each do |user, worker|
                                 unless worker == user
                                   fail = `cp -r #{worker} #{user} 2>&1`

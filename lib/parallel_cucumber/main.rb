@@ -105,7 +105,7 @@ module ParallelCucumber
       end.compact.to_h
 
       # Defaults, if absent in env. Shame 'merge' isn't something non-commutative like 'adopts/defaults'.
-      env = { TEST: 1, TEST_PROCESS_NUMBER: worker_number }.merge(env)
+      env = { TEST: 1, TEST_PROCESS_NUMBER: worker_number, WORKER_INDEX: worker_number }.merge(env)
 
       # Overwrite this if it exists in env.
       env.merge(PARALLEL_CUCUMBER_EXPORTS: env.keys.join(',')).map { |k, v| [k.to_s, v.to_s] }.to_h
