@@ -2,7 +2,7 @@ module ParallelCucumber
   module Helper
     module Command
       class << self
-        def exec_command(env, script, log_file, logger, timeout = 30)
+        def exec_command(env, script, log_file, logger, log_decoration = {}, timeout = 30) # rubocop:disable Metrics/ParameterLists, Metrics/LineLength
           full_script = "#{script} >>#{log_file} 2>&1"
           message = <<-LOG
         Running command `#{full_script}` with environment variables: #{env.sort.map { |k, v| "#{k}=#{v}" }.join(' ')}
@@ -10,7 +10,8 @@ module ParallelCucumber
           logger.debug(message)
           pstat = nil
           pout = nil
-          file = File.open(log_file, 'r+') # Open at the current end of file.
+          file = File.open(log_file)
+          file.seek(0, File::SEEK_END)
           begin
             completed = Timeout.timeout(timeout) do
               pin, pout, pstat = Open3.popen2e(env, full_script)
@@ -55,7 +56,11 @@ module ParallelCucumber
           ensure
             # It's only logging - don`t really care if we lose some, though it would be nice if we didn't.
             prefix = "#{env['TEST_USER']}-w#{env['WORKER_INDEX']}>"
-            puts "#{prefix} #{file.readline}" until file.eof
+            if log_decoration['worker_block']
+              printf(log_decoration['start'] + "\n", prefix) if log_decoration['start']
+              puts "#{prefix} #{file.readline}" until file.eof
+              printf(log_decoration['end'] + "\n", prefix) if log_decoration['end']
+            end
           end
           logger.debug("Unusual termination for command: #{script}")
           nil

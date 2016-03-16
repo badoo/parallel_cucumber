@@ -19,6 +19,7 @@ module ParallelCucumber
       @teardown_worker = options[:teardown_worker]
       @worker_delay = options[:worker_delay]
       @debug = options[:debug]
+      @log_decoration = options[:log_decoration]
     end
 
     def start(env)
@@ -44,7 +45,7 @@ module ParallelCucumber
       if @setup_worker
         mm, ss = time_it do
           @logger.info('Setup running')
-          success = Helper::Command.exec_command(env, @setup_worker, log_file, @logger)
+          success = Helper::Command.exec_command(env, @setup_worker, log_file, @logger, @log_decoration)
           @logger.warn('Setup finished with error') unless success
         end
         @logger.debug("Setup took #{mm} minutes #{ss} seconds")
@@ -57,8 +58,8 @@ module ParallelCucumber
         loop do
           tests = []
           if @pre_check
-            continue = ParallelCucumber::Helper::Command.exec_command(
-              env, @pre_check, log_file, @logger, @batch_timeout)
+            continue = Helper::Command.exec_command(
+              env, @pre_check, log_file, @logger, @log_decoration, @batch_timeout)
             unless continue
               @logger.error('Pre-check failed: quitting immediately')
               exit 1
@@ -87,7 +88,7 @@ module ParallelCucumber
             file_map.each { |_user, worker| FileUtils.mkpath(worker) if worker =~ %r{\/$} }
             mapped_batch_cmd += ' ' + tests.join(' ')
             res = ParallelCucumber::Helper::Command.exec_command(
-              batch_env, mapped_batch_cmd, log_file, @logger, @batch_timeout)
+              batch_env, mapped_batch_cmd, log_file, @logger, @log_decoration, @batch_timeout)
             batch_results = if res.nil?
                               Hash[tests.map { |t| [t, Status::UNKNOWN] }]
                             else
@@ -126,7 +127,7 @@ module ParallelCucumber
       if @teardown_worker
         mm, ss = time_it do
           @logger.info('Teardown running')
-          success = ParallelCucumber::Helper::Command.exec_command(env, @teardown_worker, log_file, @logger)
+          success = Helper::Command.exec_command(env, @teardown_worker, log_file, @logger, @log_decoration)
           @logger.warn('Teardown finished with error') unless success
         end
         @logger.debug("Teardown took #{mm} minutes #{ss} seconds")
