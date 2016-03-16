@@ -68,6 +68,15 @@ module ParallelCucumber
           options[:pre_check] = pre_check
         end
 
+        opts.on('--log-decoration JSON', 'Block quoting for logs, e.g. {start: "#start %s", end: "#end %s"}') do |json|
+          options[:log_decoration] = begin
+            JSON.parse(json)
+          rescue JSON::ParserError
+            puts 'Log block quoting not in JSON format. Did you forget to escape the quotes?'
+            raise
+          end
+        end
+
         opts.on('-e', '--env-variables JSON', 'Set additional environment variables to processes') do |env_vars|
           options[:env_variables] = begin
             JSON.parse(env_vars)
