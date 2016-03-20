@@ -9,6 +9,7 @@ module ParallelCucumber
       batch_timeout: 600,
       cucumber_options: '',
       debug: false,
+      log_dir: '.',
       env_variables: {},
       n: 0, # Default: computed from longest list in json parameters, minimum 1.
       queue_connection_params: ['redis://127.0.0.1:6379', DateTime.now.strftime('queue-%Y%m%d%H%M%S')],
@@ -66,6 +67,10 @@ module ParallelCucumber
 
         opts.on('--pre-batch-check COMMAND', 'Command causing worker to quit on exit failure') do |pre_check|
           options[:pre_check] = pre_check
+        end
+
+        opts.on('--log-dir DIR', 'Directory for worker logfiles') do |log_dir|
+          options[:log_dir] = log_dir
         end
 
         opts.on('--log-decoration JSON', 'Block quoting for logs, e.g. {start: "#start %s", end: "#end %s"}') do |json|
