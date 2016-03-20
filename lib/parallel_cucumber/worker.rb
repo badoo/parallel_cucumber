@@ -20,18 +20,20 @@ module ParallelCucumber
       @worker_delay = options[:worker_delay]
       @debug = options[:debug]
       @log_decoration = options[:log_decoration]
+      @log_file = "#{options[:log_dir]}/worker_#{index}.log"
     end
 
     def start(env)
-      log_file = "worker_#{@index}.log"
-      File.delete(log_file) if File.exist?(log_file)
-      file_handle = File.open(log_file, 'a')
+      env = env.dup.merge!(WORKER_LOG: @log_file)
+
+      File.delete(@log_file) if File.exist?(@log_file)
+      file_handle = File.open(@log_file, 'a')
       file_handle.sync = true
       @logger = ParallelCucumber::CustomLogger.new(MultiDelegator.delegate(:write, :close).to(STDOUT, file_handle))
       @logger.progname = "Worker #{@index}"
       @logger.level = @debug ? ParallelCucumber::CustomLogger::DEBUG : ParallelCucumber::CustomLogger::INFO
 
-      @logger.info("Starting, also logging to #{log_file}")
+      @logger.info("Starting, also logging to #{@log_file}")
 
       unless @worker_delay.zero?
         @logger.info("Waiting #{@worker_delay * @index} seconds before start")
@@ -45,7 +47,7 @@ module ParallelCucumber
       if @setup_worker
         mm, ss = time_it do
           @logger.info('Setup running')
-          success = Helper::Command.exec_command(env, @setup_worker, log_file, @logger, @log_decoration)
+          success = Helper::Command.exec_command(env, @setup_worker, @log_file, @logger, @log_decoration)
           @logger.warn('Setup finished with error') unless success
         end
         @logger.debug("Setup took #{mm} minutes #{ss} seconds")
@@ -59,7 +61,7 @@ module ParallelCucumber
           tests = []
           if @pre_check
             continue = Helper::Command.exec_command(
-              env, @pre_check, log_file, @logger, @log_decoration, @batch_timeout)
+              env, @pre_check, @log_file, @logger, @log_decoration, @batch_timeout)
             unless continue
               @logger.error('Pre-check failed: quitting immediately')
               exit 1
@@ -88,7 +90,7 @@ module ParallelCucumber
             file_map.each { |_user, worker| FileUtils.mkpath(worker) if worker =~ %r{\/$} }
             mapped_batch_cmd += ' ' + tests.join(' ')
             res = ParallelCucumber::Helper::Command.exec_command(
-              batch_env, mapped_batch_cmd, log_file, @logger, @log_decoration, @batch_timeout)
+              batch_env, mapped_batch_cmd, @log_file, @logger, @log_decoration, @batch_timeout)
             batch_results = if res.nil?
                               Hash[tests.map { |t| [t, Status::UNKNOWN] }]
                             else
@@ -127,7 +129,7 @@ module ParallelCucumber
       if @teardown_worker
         mm, ss = time_it do
           @logger.info('Teardown running')
-          success = Helper::Command.exec_command(env, @teardown_worker, log_file, @logger, @log_decoration)
+          success = Helper::Command.exec_command(env, @teardown_worker, @log_file, @logger, @log_decoration)
           @logger.warn('Teardown finished with error') unless success
         end
         @logger.debug("Teardown took #{mm} minutes #{ss} seconds")
