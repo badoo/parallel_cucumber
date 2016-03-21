@@ -10,6 +10,7 @@ module ParallelCucumber
       cucumber_options: '',
       debug: false,
       log_dir: '.',
+      log_decoration: {},
       env_variables: {},
       n: 0, # Default: computed from longest list in json parameters, minimum 1.
       queue_connection_params: ['redis://127.0.0.1:6379', DateTime.now.strftime('queue-%Y%m%d%H%M%S')],

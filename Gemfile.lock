@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    parallel_cucumber (0.2.0.pre.24)
+    parallel_cucumber (0.2.0.pre.25)
       cucumber (~> 2)
       parallel (~> 1.6)
       redis (~> 3.2)
