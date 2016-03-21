@@ -4,8 +4,9 @@ module ParallelCucumber
       class << self
         def exec_command(env, script, log_file, logger, log_decoration = {}, timeout = 30) # rubocop:disable Metrics/ParameterLists, Metrics/LineLength
           full_script = "#{script} >>#{log_file} 2>&1"
+          env_string = env.map { |k, v| "#{k}=#{v}" }.sort.join(' ')
           message = <<-LOG
-        Running command `#{full_script}` with environment variables: #{env.sort.map { |k, v| "#{k}=#{v}" }.join(' ')}
+        Running command `#{full_script}` with environment variables: #{env_string}
           LOG
           logger.debug(message)
           pstat = nil
@@ -50,7 +51,7 @@ module ParallelCucumber
               logger.debug("Tried SIGKILL #{pstat[:pid]} - hopefully no processes still have #{log_file}!")
             end
           rescue => e
-            logger.debug("Exception #{pstat[:pid]}")
+            logger.debug("Exception #{pstat ? pstat[:pid] : "pstat=#{pstat}=nil"}")
             trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
             logger.error("Threw: for #{full_script}, caused #{trace}")
           ensure

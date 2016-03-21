@@ -24,7 +24,7 @@ module ParallelCucumber
     end
 
     def start(env)
-      env = env.dup.merge!(WORKER_LOG: @log_file)
+      env = env.dup.merge!('WORKER_LOG' => @log_file)
 
       File.delete(@log_file) if File.exist?(@log_file)
       file_handle = File.open(@log_file, 'a')
