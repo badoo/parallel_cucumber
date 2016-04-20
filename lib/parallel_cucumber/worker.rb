@@ -20,7 +20,8 @@ module ParallelCucumber
       @worker_delay = options[:worker_delay]
       @debug = options[:debug]
       @log_decoration = options[:log_decoration]
-      @log_file = "#{options[:log_dir]}/worker_#{index}.log"
+      @log_dir = options[:log_dir]
+      @log_file = "#{@log_dir}/worker_#{index}.log"
     end
 
     def start(env)
@@ -95,12 +96,16 @@ module ParallelCucumber
                               Hash[tests.map { |t| [t, Status::UNKNOWN] }]
                             else
                               # Use system cp -r because Ruby's has crap diagnostics in weird situations.
+                              # Copy files we might have renamed or moved
                               file_map.each do |user, worker|
                                 unless worker == user
-                                  fail = `cp -r #{worker} #{user} 2>&1`
-                                  @logger.error("Copy of #{worker} to #{user} said: #{fail}") unless fail.empty?
+                                  cp_out = `cp -Rv #{worker} #{user} 2>&1`
+                                  @logger.info("Copy of #{worker} to #{user} said: #{cp_out}")
                                 end
                               end
+                              # Copy everything else too, in case it's interesting.
+                              cp_out = `cp -Rv #{test_batch_dir}/*  #{@log_dir} 2>&1`
+                              @logger.info("Copy of #{test_batch_dir}/* to #{@log_dir} said: #{cp_out}")
                               parse_results(f)
                             end
             FileUtils.rm_rf(test_batch_dir)

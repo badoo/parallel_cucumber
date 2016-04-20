@@ -55,12 +55,19 @@ module ParallelCucumber
             trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
             logger.error("Threw: for #{full_script}, caused #{trace}")
           ensure
-            # It's only logging - don`t really care if we lose some, though it would be nice if we didn't.
-            prefix = "#{env['TEST_USER']}-w#{env['WORKER_INDEX']}>"
+            # It's only logging - don't really care if we lose some, though it would be nice if we didn't.
             if log_decoration['worker_block']
-              printf(log_decoration['start'] + "\n", prefix) if log_decoration['start']
-              puts "#{prefix} #{file.readline}" until file.eof
-              printf(log_decoration['end'] + "\n", prefix) if log_decoration['end']
+              prefix = "#{env['TEST_USER']}-w#{env['WORKER_INDEX']}>"
+              block_name = ''
+              if log_decoration['start'] || log_decoration['end']
+                block_name = prefix
+                prefix = ''
+              end
+              message = ''
+              message << format(log_decoration['start'] + "\n", block_name) if log_decoration['start']
+              message << "#{prefix}#{file.readline}" until file.eof
+              message << format(log_decoration['end'] + "\n", block_name) if log_decoration['end']
+              logger << message
             end
           end
           logger.debug("Unusual termination for command: #{script}")
