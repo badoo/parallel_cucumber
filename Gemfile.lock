@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    parallel_cucumber (0.2.0.pre.25)
+    parallel_cucumber (0.2.0.pre.28)
       cucumber (~> 2)
       parallel (~> 1.6)
       redis (~> 3.2)
@@ -13,7 +13,7 @@ GEM
     builder (3.2.2)
     childprocess (0.5.9)
       ffi (~> 1.0, >= 1.0.11)
-    cucumber (2.3.2)
+    cucumber (2.3.3)
       builder (>= 2.1.2)
       cucumber-core (~> 1.4.0)
       cucumber-wire (~> 0.0.1)
@@ -33,7 +33,7 @@ GEM
     overcommit (0.32.0)
       childprocess (~> 0.5.8)
       iniparse (~> 1.4)
-    parallel (1.6.2)
+    parallel (1.8.0)
     parser (2.3.0.6)
       ast (~> 2.2)
     powerpack (0.1.1)
