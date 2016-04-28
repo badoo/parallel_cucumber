@@ -83,6 +83,15 @@ module ParallelCucumber
           end
         end
 
+        opts.on('--summary JSON', 'Summary files, e.g. {failed: "./failed.txt", unknown: "./unknown.txt"}') do |json|
+          options[:summary] = begin
+            JSON.parse(json)
+          rescue JSON::ParserError
+            puts 'Log block quoting not in JSON format. Did you forget to escape the quotes?'
+            raise
+          end
+        end
+
         opts.on('-e', '--env-variables JSON', 'Set additional environment variables to processes') do |env_vars|
           options[:env_variables] = begin
             JSON.parse(env_vars)

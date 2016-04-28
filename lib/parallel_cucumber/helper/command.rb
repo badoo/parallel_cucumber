@@ -68,6 +68,7 @@ module ParallelCucumber
               message << "#{prefix}#{file.readline}" until file.eof
               message << format(log_decoration['end'] + "\n", block_name) if log_decoration['end']
               logger << message
+              file.close
             end
           end
           logger.debug("Unusual termination for command: #{script}")
