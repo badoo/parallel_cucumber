@@ -48,7 +48,7 @@ module ParallelCucumber
         if @setup_worker
           mm, ss = time_it do
             @logger.info('Setup running')
-            success = Helper::Command.exec_command(env, @setup_worker, @log_file, @logger, @log_decoration)
+            success = Helper::Command.exec_command(env, 'setup', @setup_worker, @log_file, @logger, @log_decoration)
             @logger.warn('Setup finished with error') unless success
           end
           @logger.debug("Setup took #{mm} minutes #{ss} seconds")
@@ -63,7 +63,7 @@ module ParallelCucumber
             tests = []
             if @pre_check
               continue = Helper::Command.exec_command(
-                env, @pre_check, @log_file, @logger, @log_decoration, @batch_timeout)
+                env, 'precheck', @pre_check, @log_file, @logger, @log_decoration, @batch_timeout)
               unless continue
                 @logger.error('Pre-check failed: quitting immediately')
                 exit 1
@@ -92,24 +92,37 @@ module ParallelCucumber
               file_map.each { |_user, worker| FileUtils.mkpath(worker) if worker =~ %r{\/$} }
               mapped_batch_cmd += ' ' + tests.join(' ')
               res = ParallelCucumber::Helper::Command.exec_command(
-                batch_env, mapped_batch_cmd, @log_file, @logger, @log_decoration, @batch_timeout)
+                batch_env, 'batch', mapped_batch_cmd, @log_file, @logger, @log_decoration, @batch_timeout)
               batch_results = if res.nil?
-                                Hash[tests.map { |t| [t, Status::UNKNOWN] }]
+                                {}
                               else
-                                # Use system cp -r because Ruby's has crap diagnostics in weird situations.
-                                # Copy files we might have renamed or moved
-                                file_map.each do |user, worker|
-                                  unless worker == user
-                                    cp_out = `cp -Rv #{worker} #{user} 2>&1`
-                                    @logger.info("Copy of #{worker} to #{user} said: #{cp_out}")
+                                Helper::Command.wrap_block(@log_decoration, 'file copy', @logger) do
+                                  # Use system cp -r because Ruby's has crap diagnostics in weird situations.
+                                  # Copy files we might have renamed or moved
+                                  file_map.each do |user, worker|
+                                    unless worker == user
+                                      cp_out = `cp -Rv #{worker} #{user} 2>&1`
+                                      @logger.info("Copy of #{worker} to #{user} said: #{cp_out}")
+                                    end
                                   end
+                                  # Copy everything else too, in case it's interesting.
+                                  cp_out = `cp -Rv #{test_batch_dir}/*  #{@log_dir} 2>&1`
+                                  @logger.info("Copy of #{test_batch_dir}/* to #{@log_dir} said: #{cp_out}")
+                                  parse_results(f)
                                 end
-                                # Copy everything else too, in case it's interesting.
-                                cp_out = `cp -Rv #{test_batch_dir}/*  #{@log_dir} 2>&1`
-                                @logger.info("Copy of #{test_batch_dir}/* to #{@log_dir} said: #{cp_out}")
-                                parse_results(f)
                               end
               FileUtils.rm_rf(test_batch_dir)
+              batch_keys = batch_results.keys
+              test_syms = tests.map(&:to_sym)
+              unrun = test_syms - batch_keys
+              surfeit = batch_keys - test_syms
+              unrun.each { |test| batch_results[test] = Status::UNKNOWN }
+              surfeit.each { |test| batch_results.delete(test) }
+              @logger.error("Did not run #{unrun.count}/#{tests.count}: #{unrun.join(' ')}") unless unrun.empty?
+              @logger.error("Extraneous runs (#{surfeit.count}): #{surfeit.join(' ')}") unless surfeit.empty?
+              # Don't see how this can happen, but...
+              @logger.error('Tests/result mismatch: ' \
+                            "#{tests.count}!=#{batch_results.count}: #{tests}/#{batch_keys}") unless surfeit.empty?
 
               batch_info = Status.constants.map do |status|
                 status = Status.const_get(status)
@@ -119,14 +132,8 @@ module ParallelCucumber
                 @logger.info("#{s.to_s.upcase} #{tt.count} tests: #{tt.join(' ')}") unless tt.empty?
                 running_total[s] += tt.count unless tt.empty?
               end
+              running_total[:batches] += 1
               @logger.info(running_total.sort.to_s)
-
-              unless tests.count == batch_results.count
-                @logger.error(<<-LOG)
-#{tests.count} tests were taken from Queue, but #{batch_results.count} ran:
-                #{((tests - batch_results.keys) + (batch_results.keys - tests)).join(', ')}.
-                LOG
-              end
               results.merge!(batch_results)
             end
             @logger.debug("Batch #{batch_id} took #{batch_mm} minutes #{batch_ss} seconds")
@@ -137,11 +144,13 @@ module ParallelCucumber
         if @teardown_worker
           mm, ss = time_it do
             @logger.info('Teardown running')
-            success = Helper::Command.exec_command(env, @teardown_worker, @log_file, @logger, @log_decoration)
+            success = Helper::Command.exec_command(
+              env, 'teardown', @teardown_worker, @log_file, @logger, @log_decoration)
             @logger.warn('Teardown finished with error') unless success
           end
           @logger.debug("Teardown took #{mm} minutes #{ss} seconds")
         end
+        results[":worker-#{@index}"] = running_total
         results
       end
     end
