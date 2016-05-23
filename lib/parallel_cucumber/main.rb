@@ -12,13 +12,6 @@ module ParallelCucumber
       @logger.level = options[:debug] ? ParallelCucumber::CustomLogger::DEBUG : ParallelCucumber::CustomLogger::INFO
     end
 
-    def wrap_block(log_decoration, block_name, logger)
-      logger << format(log_decoration['start'] + "\n", block_name) if log_decoration['start']
-      yield
-    ensure
-      logger << format(log_decoration['end'] + "\n", block_name) if log_decoration['end']
-    end
-
     def run
       queue = Helper::Queue.new(@options[:queue_connection_params])
       @logger.debug("Connecting to Queue: #{@options[:queue_connection_params]}")
@@ -70,17 +63,22 @@ module ParallelCucumber
       diff = []
       info = {}
       total_mm, total_ss = time_it do
-        results = wrap_block(@options[:log_decoration],
-                             @options[:log_decoration]['worker_block'] || 'workers',
-                             @logger) do
+        results = Helper::Command.wrap_block(@options[:log_decoration],
+                                             @options[:log_decoration]['worker_block'] || 'workers',
+                                             @logger) do
           Parallel.map(0...number_of_workers, in_processes: number_of_workers) do |index|
             Worker.new(@options, index).start(env_for_worker(@options[:env_variables], index))
-          end.inject(:merge) # Returns hash of file:line to statuses.
+          end.inject(:merge) # Returns hash of file:line to statuses + :worker-index to summary.
         end
 
-        diff = tests - results.keys
-        @logger.error("Tests #{diff.join(' ')} were not run") unless diff.empty?
+        unrun = tests - results.keys
+        @logger.error("Tests #{unrun.join(' ')} were not run") unless diff.empty?
         @logger.error("Queue #{queue.name} is not empty") unless queue.empty?
+
+        Helper::Command.wrap_block(
+          @options[:log_decoration],
+          'Worker summary',
+          @logger) { results.find_all { |w| @logger.info("#{w.first} #{w.last.sort}") if w.first =~ /^:worker-/ } }
 
         info = Status.constants.map do |status|
           status = Status.const_get(status)
