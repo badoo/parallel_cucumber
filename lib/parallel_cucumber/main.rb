@@ -70,7 +70,7 @@ module ParallelCucumber
             Worker.new(@options, index).start(env_for_worker(@options[:env_variables], index))
           end.inject(:merge) # Returns hash of file:line to statuses + :worker-index to summary.
         end
-
+        results ||= {}
         unrun = tests - results.keys
         @logger.error("Tests #{unrun.join(' ')} were not run") unless diff.empty?
         @logger.error("Queue #{queue.name} is not empty") unless queue.empty?

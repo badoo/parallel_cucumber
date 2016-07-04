@@ -102,12 +102,12 @@ module ParallelCucumber
                                   file_map.each do |user, worker|
                                     unless worker == user
                                       cp_out = `cp -Rv #{worker} #{user} 2>&1`
-                                      @logger.info("Copy of #{worker} to #{user} said: #{cp_out}")
+                                      @logger.debug("Copy of #{worker} to #{user} said: #{cp_out}")
                                     end
                                   end
                                   # Copy everything else too, in case it's interesting.
                                   cp_out = `cp -Rv #{test_batch_dir}/*  #{@log_dir} 2>&1`
-                                  @logger.info("Copy of #{test_batch_dir}/* to #{@log_dir} said: #{cp_out}")
+                                  @logger.debug("Copy of #{test_batch_dir}/* to #{@log_dir} said: #{cp_out}")
                                   parse_results(f)
                                 end
                               end
