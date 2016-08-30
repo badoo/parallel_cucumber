@@ -87,7 +87,11 @@ module ParallelCucumber
               FileUtils.mkpath(test_batch_dir)
               f = "#{test_batch_dir}/test_state.json"
               cmd = "#{@test_command} --format pretty --format json --out #{f} #{@cucumber_options} "
-              batch_env = { :TEST_BATCH_ID.to_s => batch_id, :TEST_BATCH_DIR.to_s => test_batch_dir }.merge(env)
+              batch_env = {
+                :TEST_BATCH_ID.to_s => batch_id,
+                :TEST_BATCH_DIR.to_s => test_batch_dir,
+                :BATCH_NUMBER.to_s => running_total[:batches].to_s
+              }.merge(env)
               mapped_batch_cmd, file_map = Helper::Cucumber.batch_mapped_files(cmd, test_batch_dir, batch_env)
               file_map.each { |_user, worker| FileUtils.mkpath(worker) if worker =~ %r{\/$} }
               mapped_batch_cmd += ' ' + tests.join(' ')
