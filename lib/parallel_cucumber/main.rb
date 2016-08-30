@@ -38,7 +38,7 @@ module ParallelCucumber
       queue.enqueue(tests)
 
       if @options[:n] == 0
-        @options[:n] = [1, @options[:env_variables].map { |_k, v| v.respond_to?(:count) && v.count }].flatten.max
+        @options[:n] = [1, @options[:env_variables].map { |_k, v| v.is_a?(Array) ? v.count : 0 }].flatten.max
         @logger.info("Inferred worker count #{@options[:n]} from env_variables option")
       end
 
@@ -52,7 +52,7 @@ module ParallelCucumber
 
       if (@options[:batch_size] - 1) * number_of_workers >= tests.count
         original_batch_size = @options[:batch_size]
-        @options[:batch_size] = (tests.count.to_f / number_of_workers).ceil
+        @options[:batch_size] = [(tests.count.to_f / number_of_workers).floor, 1].max
         @logger.info(<<-LOG)
           Batch size was overridden to #{@options[:batch_size]}.
           Presumably it will be more optimal for #{tests.count} tests and #{number_of_workers} workers
@@ -63,22 +63,36 @@ module ParallelCucumber
       diff = []
       info = {}
       total_mm, total_ss = time_it do
-        results = Parallel.map(0...number_of_workers, in_processes: number_of_workers) do |index|
-          Worker.new(@options, index).start(env_for_worker(@options[:env_variables], index))
-        end.inject(:merge)
-
-        diff = tests - results.keys
-        @logger.error("Tests #{diff.join(' ')} were not run") unless diff.empty?
+        results = Helper::Command.wrap_block(@options[:log_decoration],
+                                             @options[:log_decoration]['worker_block'] || 'workers',
+                                             @logger) do
+          Parallel.map(0...number_of_workers, in_processes: number_of_workers) do |index|
+            Worker.new(@options, index).start(env_for_worker(@options[:env_variables], index))
+          end.inject(:merge) # Returns hash of file:line to statuses + :worker-index to summary.
+        end
+        results ||= {}
+        unrun = tests - results.keys
+        @logger.error("Tests #{unrun.join(' ')} were not run") unless diff.empty?
         @logger.error("Queue #{queue.name} is not empty") unless queue.empty?
+
+        Helper::Command.wrap_block(
+          @options[:log_decoration],
+          'Worker summary',
+          @logger) { results.find_all { |w| @logger.info("#{w.first} #{w.last.sort}") if w.first =~ /^:worker-/ } }
 
         info = Status.constants.map do |status|
           status = Status.const_get(status)
-          [status, results.select { |_t, s| s == status }.keys]
+          tests_with_status = results.select { |_t, s| s == status }.keys
+          [status, tests_with_status]
         end.to_h
       end
 
+      puts "SUMMARY=#{@options[:summary]}"
       info.each do |s, tt|
-        @logger.info("Total: #{s.to_s.upcase} tests (#{tt.count}): #{tt.join(' ')}") unless tt.empty?
+        next if tt.empty?
+        @logger.info("Total: #{s.to_s.upcase} tests (#{tt.count}): #{tt.join(' ')}")
+        filename = @options[:summary] && @options[:summary][s.to_s.downcase]
+        open(filename, 'w') { |f| f << tt.join("\n") } if filename
       end
 
       @logger.info("\nTook #{total_mm} minutes #{total_ss} seconds")
@@ -105,7 +119,7 @@ module ParallelCucumber
       end.compact.to_h
 
       # Defaults, if absent in env. Shame 'merge' isn't something non-commutative like 'adopts/defaults'.
-      env = { TEST: 1, TEST_PROCESS_NUMBER: worker_number }.merge(env)
+      env = { TEST: 1, TEST_PROCESS_NUMBER: worker_number, WORKER_INDEX: worker_number }.merge(env)
 
       # Overwrite this if it exists in env.
       env.merge(PARALLEL_CUCUMBER_EXPORTS: env.keys.join(',')).map { |k, v| [k.to_s, v.to_s] }.to_h
