@@ -7,7 +7,7 @@ Gem::Specification.new name, ParallelCucumber::VERSION do |spec|
   spec.email = 'a.bayandin@gmail.com'
   spec.summary = 'Run cucumber in parallel'
   spec.description = 'Our own parallel cucumber with queue and workers'
-  spec.homepage = 'https://github.com/bayandin/parallel_cucumber'
+  spec.homepage = 'https://github.com/badoo/parallel_cucumber'
   spec.license = 'MIT'
 
   spec.files = Dir['{lib}/**/*.rb', 'bin/*', 'README.md']
