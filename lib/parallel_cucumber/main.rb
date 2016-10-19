@@ -83,7 +83,8 @@ module ParallelCucumber
         Helper::Command.wrap_block(
           @options[:log_decoration],
           'Worker summary',
-          @logger) { results.find_all { |w| @logger.info("#{w.first} #{w.last.sort}") if w.first =~ /^:worker-/ } }
+          @logger
+        ) { results.find_all { |w| @logger.info("#{w.first} #{w.last.sort}") if w.first =~ /^:worker-/ } }
 
         info = Status.constants.map do |status|
           status = Status.const_get(status)
@@ -92,7 +93,7 @@ module ParallelCucumber
         end.to_h
       end
 
-      puts "SUMMARY=#{@options[:summary]}"
+      @logger.debug("SUMMARY=#{@options[:summary]}") if @options[:summary]
       info.each do |s, tt|
         next if tt.empty?
         @logger.info("Total: #{s.to_s.upcase} tests (#{tt.count}): #{tt.join(' ')}")
