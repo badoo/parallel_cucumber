@@ -90,7 +90,7 @@ module ParallelCucumber
           profiles = options.scan(/(?:^|\s)((?:--profile|-p)\s+[\S]+)/)
           profiles.map(&:first).each do |profile|
             option = profile.gsub(/(--profile|-p)\s+/, '')
-            options.gsub!(profile, _expand_profiles(config[option], config))
+            options.gsub!(profile, _expand_profiles(config.fetch(option), config))
           end
           options.strip
         end

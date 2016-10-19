@@ -1,5 +1,4 @@
 require 'English'
-require 'tempfile'
 require 'timeout'
 
 module ParallelCucumber
@@ -9,7 +8,7 @@ module ParallelCucumber
     end
 
     def status
-      queue_length = queue.length
+      queue_length = @queue.length
       now = Time.now
       @full ||= queue_length
       @start ||= now
@@ -82,7 +81,8 @@ module ParallelCucumber
             tests = []
             if @pre_check
               continue = Helper::Command.exec_command(
-                env, 'precheck', @pre_check, @log_file, @logger, @log_decoration, @batch_timeout)
+                env, 'precheck', @pre_check, @log_file, @logger, @log_decoration, @batch_timeout
+              )
               unless continue
                 @logger.error('Pre-check failed: quitting immediately')
                 exit 1
@@ -106,12 +106,17 @@ module ParallelCucumber
               FileUtils.mkpath(test_batch_dir)
               f = "#{test_batch_dir}/test_state.json"
               cmd = "#{@test_command} --format pretty --format json --out #{f} #{@cucumber_options} "
-              batch_env = { :TEST_BATCH_ID.to_s => batch_id, :TEST_BATCH_DIR.to_s => test_batch_dir }.merge(env)
+              batch_env = {
+                :TEST_BATCH_ID.to_s => batch_id,
+                :TEST_BATCH_DIR.to_s => test_batch_dir,
+                :BATCH_NUMBER.to_s => running_total[:batches].to_s
+              }.merge(env)
               mapped_batch_cmd, file_map = Helper::Cucumber.batch_mapped_files(cmd, test_batch_dir, batch_env)
               file_map.each { |_user, worker| FileUtils.mkpath(worker) if worker =~ %r{\/$} }
               mapped_batch_cmd += ' ' + tests.join(' ')
               res = ParallelCucumber::Helper::Command.exec_command(
-                batch_env, 'batch', mapped_batch_cmd, @log_file, @logger, @log_decoration, @batch_timeout)
+                batch_env, 'batch', mapped_batch_cmd, @log_file, @logger, @log_decoration, @batch_timeout
+              )
               batch_results = if res.nil?
                                 {}
                               else
@@ -140,8 +145,9 @@ module ParallelCucumber
               @logger.error("Did not run #{unrun.count}/#{tests.count}: #{unrun.join(' ')}") unless unrun.empty?
               @logger.error("Extraneous runs (#{surfeit.count}): #{surfeit.join(' ')}") unless surfeit.empty?
               # Don't see how this can happen, but...
-              @logger.error('Tests/result mismatch: ' \
-                            "#{tests.count}!=#{batch_results.count}: #{tests}/#{batch_keys}") unless surfeit.empty?
+              unless surfeit.empty?
+                @logger.error("Tests/result mismatch: #{tests.count}!=#{batch_results.count}: #{tests}/#{batch_keys}")
+              end
 
               batch_info = Status.constants.map do |status|
                 status = Status.const_get(status)
@@ -164,7 +170,8 @@ module ParallelCucumber
           mm, ss = time_it do
             @logger.info('Teardown running')
             success = Helper::Command.exec_command(
-              env, 'teardown', @teardown_worker, @log_file, @logger, @log_decoration)
+              env, 'teardown', @teardown_worker, @log_file, @logger, @log_decoration
+            )
             @logger.warn('Teardown finished with error') unless success
           end
           @logger.debug("Teardown took #{mm} minutes #{ss} seconds")
@@ -175,8 +182,15 @@ module ParallelCucumber
     end
 
     def parse_results(f)
+      unless File.file?(f)
+        @logger.error("Results file does not exist: #{f}")
+        return {}
+      end
       json_report = File.read(f)
-      raise 'Results file was empty' if json_report.empty?
+      if json_report.empty?
+        @logger.error("Results file is empty: #{f}")
+        return {}
+      end
       Helper::Cucumber.parse_json_report(json_report)
     rescue => e
       trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
