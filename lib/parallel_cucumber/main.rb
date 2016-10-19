@@ -66,7 +66,12 @@ module ParallelCucumber
         results = Helper::Command.wrap_block(@options[:log_decoration],
                                              @options[:log_decoration]['worker_block'] || 'workers',
                                              @logger) do
-          Parallel.map(0...number_of_workers, in_processes: number_of_workers) do |index|
+          finished = []
+          Parallel.map(
+            0...number_of_workers,
+            in_processes: number_of_workers,
+            finish: -> (_, index, _) { @logger.info("Finished: #{finished[index] = index} #{finished - [nil]}") }
+          ) do |index|
             Worker.new(@options, index).start(env_for_worker(@options[:env_variables], index))
           end.inject(:merge) # Returns hash of file:line to statuses + :worker-index to summary.
         end
