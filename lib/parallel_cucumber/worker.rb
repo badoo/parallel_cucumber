@@ -2,6 +2,23 @@ require 'English'
 require 'timeout'
 
 module ParallelCucumber
+  class Tracker
+    def initialize(queue)
+      @queue = queue
+    end
+
+    def status
+      queue_length = @queue.length
+      now = Time.now
+      @full ||= queue_length
+      @start ||= now
+      completed = @full - queue_length
+      elapsed = now - @start
+      estimate = (completed == 0) ? '' : " #{(elapsed * @full / completed).to_i}s est"
+      "#{queue_length}/#{@full} left #{elapsed.to_i}s worker#{estimate}"
+    end
+  end
+
   class Worker
     include ParallelCucumber::Helper::Utils
 
@@ -11,6 +28,7 @@ module ParallelCucumber
       @cucumber_options = options[:cucumber_options]
       @test_command = options[:test_command]
       @pre_check = options[:pre_check]
+      @pretty = options[:pretty]
       @env_variables = options[:env_variables]
       @index = index
       @queue_connection_params = options[:queue_connection_params]
@@ -56,9 +74,11 @@ module ParallelCucumber
         results = {}
         running_total = Hash.new(0)
         queue = ParallelCucumber::Helper::Queue.new(@queue_connection_params)
+        queue_tracker = Tracker.new(queue)
 
         loop_mm, loop_ss = time_it do
           loop do
+            break if queue.empty?
             tests = []
             if @pre_check
               continue = Helper::Command.exec_command(
@@ -79,14 +99,14 @@ module ParallelCucumber
 
             batch_id = "#{Time.now.to_i}-#{@index}"
             @logger.debug("Batch ID is #{batch_id}")
-            @logger.info("Took #{tests.count} from the queue (#{queue.length} left): #{tests.join(' ')}")
+            @logger.info("Took #{tests.count} from the queue (#{queue_tracker.status}): #{tests.join(' ')}")
 
             batch_mm, batch_ss = time_it do
               test_batch_dir = "/tmp/w-#{batch_id}"
               FileUtils.rm_rf(test_batch_dir)
               FileUtils.mkpath(test_batch_dir)
               f = "#{test_batch_dir}/test_state.json"
-              cmd = "#{@test_command} --format pretty --format json --out #{f} #{@cucumber_options} "
+              cmd = "#{@test_command} #{@pretty} --format json --out #{f} #{@cucumber_options} "
               batch_env = {
                 :TEST_BATCH_ID.to_s => batch_id,
                 :TEST_BATCH_DIR.to_s => test_batch_dir,
