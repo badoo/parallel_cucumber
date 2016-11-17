@@ -1,85 +1,178 @@
 require 'json'
 require 'optparse'
+require 'date'
 
 module ParallelCucumber
-  module Cli
-    class << self
-      DEFAULTS = {
-        env_variables: {},
-        thread_delay: 0,
-        cucumber_options: '',
-        n: 1
-      }.freeze
+  class Cli
+    DEFAULTS = {
+      batch_size: 1,
+      batch_timeout: 600,
+      cucumber_options: '',
+      debug: false,
+      log_dir: '.',
+      log_decoration: {},
+      env_variables: {},
+      n: 0, # Default: computed from longest list in json parameters, minimum 1.
+      queue_connection_params: ['redis://127.0.0.1:6379', DateTime.now.strftime('queue-%Y%m%d%H%M%S')],
+      worker_delay: 0,
+      test_command: 'cucumber'
+    }.freeze
 
-      def run(argv)
-        options = parse_options!(argv)
+    def initialize(argv)
+      @argv = argv
+      @logger = ParallelCucumber::CustomLogger.new(STDOUT)
+      @logger.progname = 'CLI'
+      @logger.level = if @argv.include?('--debug')
+                        ParallelCucumber::CustomLogger::DEBUG
+                      else
+                        ParallelCucumber::CustomLogger::INFO
+                      end
+    end
 
-        ParallelCucumber.run_tests_in_parallel(options)
-      end
+    def run
+      options = parse_options!(@argv)
+      message = <<-LOG
+          Running parallel_cucumber with options: #{options.map { |k, v| "#{k}=#{v}" }.join(', ')}
+      LOG
+      @logger.debug(message)
+      ParallelCucumber::Main.new(options).run
+    end
 
-      private
+    private
 
-      def parse_options!(argv)
-        options = DEFAULTS.dup
+    def parse_options!(argv)
+      options = DEFAULTS.dup
 
-        option_parser = OptionParser.new do |opts|
-          opts.banner = [
-            'Usage: parallel_cucumber [options] [ [FILE|DIR|URL][:LINE[:LINE]*] ]',
-            'Example: parallel_cucumber -n 4 -o "-f pretty -f html -o report.html" examples/i18n/en/features'
-          ].join("\n")
-          opts.on('-n [PROCESSES]', Integer, 'How many processes to use') do |n|
-            if n < 1
-              puts "The minimum number of processes is 1 but given: '#{n}'"
-              exit 1
-            end
-            options[:n] = n
+      option_parser = OptionParser.new do |opts|
+        opts.banner = [
+          'Usage: parallel_cucumber [options] [ [FILE|DIR|URL][:LINE[:LINE]*] ]',
+          'Example: parallel_cucumber -n 4 -o "-f pretty -f html -o report.html" examples/i18n/en/features'
+        ].join("\n")
+
+        opts.on('-n WORKERS', Integer, 'How many workers to use. Default is 1 or longest list in -e') do |n|
+          if n < 1
+            puts "The minimum number of processes is 1 but given: '#{n}'"
+            exit 1
           end
-          opts.on('-o', '--cucumber-options "[OPTIONS]"', 'Run cucumber with these options') do |cucumber_options|
-            options[:cucumber_options] = cucumber_options
-          end
-          opts.on('-e', '--env-variables [JSON]', 'Set additional environment variables to processes') do |env_vars|
-            options[:env_variables] = begin
-              JSON.parse(env_vars)
-            rescue JSON::ParserError
-              puts 'Additional environment variables not in JSON format. And do not forget to escape quotes'
-              exit 1
-            end
-          end
-          opts.on('-s', '--setup-script [SCRIPT]', 'Execute SCRIPT before each process') do |script|
-            check_script(script)
-            options[:setup_script] = File.expand_path(script)
-          end
-          opts.on('-t', '--teardown-script [SCRIPT]', 'Execute SCRIPT after each process') do |script|
-            check_script(script)
-            options[:teardown_script] = File.expand_path(script)
-          end
-          opts.on('--thread-delay [SECONDS]', Float, 'Delay before next thread starting') do |thread_delay|
-            options[:thread_delay] = thread_delay
-          end
-          opts.on('-v', '--version', 'Show version') do
-            puts ParallelCucumber::VERSION
-            exit 0
-          end
-          opts.on('-h', '--help', 'Show this') do
-            puts opts
-            exit 0
+          options[:n] = n
+        end
+
+        opts.on('-o', '--cucumber-options "OPTIONS"', 'Run cucumber with these options') do |cucumber_options|
+          options[:cucumber_options] = cucumber_options
+        end
+
+        opts.on('--test-command COMMAND',
+                "Command to run for test phase, default #{DEFAULTS[:test_command]}") do |test_command|
+          options[:test_command] = test_command
+        end
+
+        opts.on('--pre-batch-check COMMAND', 'Command causing worker to quit on exit failure') do |pre_check|
+          options[:pre_check] = pre_check
+        end
+
+        options[:pretty] = '--format pretty'
+        opts.on('--no-pretty', "Suppress the default 'pretty' formatter directed at stdout") do
+          options[:pretty] = ''
+        end
+
+        opts.on('--log-dir DIR', 'Directory for worker logfiles') do |log_dir|
+          options[:log_dir] = log_dir
+        end
+
+        opts.on('--log-decoration JSON', 'Block quoting for logs, e.g. {start: "#start %s", end: "#end %s"}') do |json|
+          options[:log_decoration] = begin
+            JSON.parse(json)
+          rescue JSON::ParserError
+            puts 'Log block quoting not in JSON format. Did you forget to escape the quotes?'
+            raise
           end
         end
 
-        option_parser.parse!(argv)
-        options[:cucumber_args] = argv
+        opts.on('--summary JSON', 'Summary files, e.g. {failed: "./failed.txt", unknown: "./unknown.txt"}') do |json|
+          options[:summary] = begin
+            JSON.parse(json)
+          rescue JSON::ParserError
+            puts 'Log block quoting not in JSON format. Did you forget to escape the quotes?'
+            raise
+          end
+        end
 
-        options
-      rescue OptionParser::InvalidOption => e
-        puts "Unknown option #{e}"
-        puts option_parser.help
-        exit 1
+        opts.on('-e', '--env-variables JSON', 'Set additional environment variables to processes') do |env_vars|
+          options[:env_variables] = begin
+            JSON.parse(env_vars)
+          rescue JSON::ParserError
+            puts 'Additional environment variables not in JSON format. Did you forget to escape the quotes?'
+            raise
+          end
+        end
+
+        help_message = "How many tests each worker takes from queue at once. Default is #{DEFAULTS[:batch_size]}"
+        opts.on('--batch-size SIZE', Integer, help_message.gsub(/\s+/, ' ').strip) do |batch_size|
+          if batch_size < 1
+            puts "The minimum batch size is 1 but given: '#{batch_size}'"
+            exit 1
+          end
+          options[:batch_size] = batch_size
+        end
+
+        help_message = <<-TEXT
+         `url,name`
+          Url for TCP connection:
+          `redis://[password]@[hostname]:[port]/[db]` (password, port and database are optional),
+          for unix socket connection: `unix://[path to Redis socket]`.
+          Default is redis://127.0.0.1:6379 and name is `queue`
+        TEXT
+        opts.on('-q', '--queue-connection-params ARRAY', Array, help_message.gsub(/\s+/, ' ').strip) do |params|
+          options[:queue_connection_params] = params
+        end
+
+        opts.on('--setup-worker SCRIPT', 'Execute SCRIPT before each worker') do |script|
+          options[:setup_worker] = script
+        end
+
+        opts.on('--teardown-worker SCRIPT', 'Execute SCRIPT after each worker') do |script|
+          options[:teardown_worker] = script
+        end
+
+        help_message = <<-TEXT
+          Delay before next worker starting.
+          Could be used for avoiding 'spikes' in CPU and RAM usage
+          Default is #{DEFAULTS[:worker_delay]}
+        TEXT
+        opts.on('--worker-delay SECONDS', Float, help_message.gsub(/\s+/, ' ').strip) do |worker_delay|
+          options[:worker_delay] = worker_delay
+        end
+
+        help_message = <<-TEXT
+          Timeout for each batch of tests. Default is #{DEFAULTS[:batch_timeout]}
+        TEXT
+        opts.on('--batch-timeout SECONDS', Float, help_message.gsub(/\s+/, ' ').strip) do |batch_timeout|
+          options[:batch_timeout] = batch_timeout
+        end
+
+        opts.on('--debug', 'Print more debug information') do |debug|
+          options[:debug] = debug
+        end
+
+        opts.on('-v', '--version', 'Show version') do
+          puts ParallelCucumber::VERSION
+          exit 0
+        end
+
+        opts.on('-h', '--help', 'Show this') do
+          puts opts
+          exit 0
+        end
       end
 
-      def check_script(path)
-        raise("File '#{path}' does not exist") unless File.exist?(path)
-        raise("File '#{path}' is not executable") unless File.executable?(path)
-      end
-    end # class
-  end # Cli
-end # ParallelCucumber
+      option_parser.parse!(argv)
+      options[:cucumber_args] = argv
+
+      options
+    rescue OptionParser::InvalidOption => e
+      puts "Unknown option #{e}"
+      puts option_parser.help
+      exit 1
+    end
+  end
+end
