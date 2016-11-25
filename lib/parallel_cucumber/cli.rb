@@ -70,11 +70,6 @@ module ParallelCucumber
           options[:pre_check] = pre_check
         end
 
-        options[:pretty] = '--format pretty'
-        opts.on('--no-pretty', "Suppress the default 'pretty' formatter directed at stdout") do
-          options[:pretty] = ''
-        end
-
         opts.on('--log-dir DIR', 'Directory for worker logfiles') do |log_dir|
           options[:log_dir] = log_dir
         end
