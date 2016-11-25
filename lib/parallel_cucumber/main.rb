@@ -26,13 +26,20 @@ module ParallelCucumber
         dry_run_report = Helper::Cucumber.dry_run_report(@options[:cucumber_options], @options[:cucumber_args])
         tests = Helper::Cucumber.parse_json_report(dry_run_report).keys
       end
-      tests.shuffle!
-      @logger.debug("Generating all tests took #{mm} minutes #{ss} seconds")
 
       if tests.empty?
         @logger.error('There are no tests to run')
         exit(1)
       end
+
+      long_running_tests = @options[:long_running_tests]
+      first_tests = long_running_tests & tests
+      if !long_running_tests.empty? && first_tests.empty?
+        @logger.info("No long running tests found: #{long_running_tests}")
+      end
+      last_tests = (tests - first_tests).shuffle
+      tests = first_tests + last_tests
+      @logger.debug("Generating all tests took #{mm} minutes #{ss} seconds")
 
       @logger.info("Adding #{tests.count} tests to Queue")
       queue.enqueue(tests)

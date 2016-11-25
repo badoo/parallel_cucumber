@@ -93,7 +93,7 @@ module ParallelCucumber
               tests << queue.dequeue
             end
             tests.compact!
-            tests.sort!
+            tests.sort! # Workaround for https://github.com/cucumber/cucumber-ruby/issues/952
             break if tests.empty?
 
             batch_id = "#{Time.now.to_i}-#{@index}"

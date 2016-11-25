@@ -9,6 +9,9 @@ Example: parallel_cucumber -n 4 -o "-f pretty -f html -o report.html" examples/i
     -o, --cucumber-options "OPTIONS" Run cucumber with these options
         --test-command COMMAND       Command to run for test phase, default cucumber
         --pre-batch-check COMMAND    Command causing worker to quit on exit failure
+        --log-dir DIR                Directory for worker logfiles
+        --log-decoration JSON        Block quoting for logs, e.g. {start: "#start %s", end: "#end %s"}
+        --summary JSON               Summary files, e.g. {failed: "./failed.txt", unknown: "./unknown.txt"}
     -e, --env-variables JSON         Set additional environment variables to processes
         --batch-size SIZE            How many tests each worker takes from queue at once. Default is 1
     -q ARRAY,                        `url,name` Url for TCP connection: `redis://[password]@[hostname]:[port]/[db]` (password, port and database are optional), for unix socket connection: `unix://[path to Redis socket]`. Default is redis://127.0.0.1:6379 and name is `queue`
@@ -18,6 +21,7 @@ Example: parallel_cucumber -n 4 -o "-f pretty -f html -o report.html" examples/i
         --worker-delay SECONDS       Delay before next worker starting. Could be used for avoiding 'spikes' in CPU and RAM usage Default is 0
         --batch-timeout SECONDS      Timeout for each batch of tests. Default is 600
         --debug                      Print more debug information
+        --long-running-tests ARRAY   Comma-separated list of tests which will be added to the beginning of the queue
     -v, --version                    Show version
     -h, --help                       Show this
 ```
