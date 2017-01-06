@@ -7,6 +7,7 @@ module ParallelCucumber
     DEFAULTS = {
       batch_size: 1,
       batch_timeout: 600,
+      setup_timeout: 30,
       cucumber_options: '',
       debug: false,
       log_dir: '.',
@@ -148,6 +149,13 @@ module ParallelCucumber
         TEXT
         opts.on('--batch-timeout SECONDS', Float, help_message.gsub(/\s+/, ' ').strip) do |batch_timeout|
           options[:batch_timeout] = batch_timeout
+        end
+
+        help_message = <<-TEXT
+          Timeout for each worker's set-up phase. Default is #{DEFAULTS[:setup_timeout]}
+        TEXT
+        opts.on('--setup-timeout SECONDS', Float, help_message.gsub(/\s+/, ' ').strip) do |setup_timeout|
+          options[:setup_timeout] = setup_timeout
         end
 
         opts.on('--debug', 'Print more debug information') do |debug|
