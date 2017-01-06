@@ -25,6 +25,7 @@ module ParallelCucumber
     def initialize(options, index)
       @batch_size = options[:batch_size]
       @batch_timeout = options[:batch_timeout]
+      @setup_timeout = options[:setup_timeout]
       @cucumber_options = options[:cucumber_options]
       @test_command = options[:test_command]
       @pre_check = options[:pre_check]
@@ -65,7 +66,9 @@ module ParallelCucumber
         if @setup_worker
           mm, ss = time_it do
             @logger.info('Setup running')
-            success = Helper::Command.exec_command(env, 'setup', @setup_worker, @log_file, @logger, @log_decoration)
+            success = Helper::Command.exec_command(
+              env, 'setup', @setup_worker, @log_file, @logger, @log_decoration, @setup_timeout
+            )
             @logger.warn('Setup finished with error') unless success
           end
           @logger.debug("Setup took #{mm} minutes #{ss} seconds")
