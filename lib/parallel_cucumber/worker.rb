@@ -69,7 +69,10 @@ module ParallelCucumber
             success = Helper::Command.exec_command(
               env, 'setup', @setup_worker, @log_file, @logger, @log_decoration, @setup_timeout
             )
-            @logger.warn('Setup finished with error') unless success
+            unless success
+              @logger.warn('Setup failed: quitting immediately')
+              break
+            end
           end
           @logger.debug("Setup took #{mm} minutes #{ss} seconds")
         end
@@ -89,7 +92,7 @@ module ParallelCucumber
               )
               unless continue
                 @logger.error('Pre-check failed: quitting immediately')
-                exit 1
+                break
               end
             end
             @batch_size.times do
