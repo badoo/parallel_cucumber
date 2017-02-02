@@ -25,10 +25,10 @@ module ParallelCucumber
     def initialize(options, index)
       @batch_size = options[:batch_size]
       @batch_timeout = options[:batch_timeout]
+      @setup_timeout = options[:setup_timeout]
       @cucumber_options = options[:cucumber_options]
       @test_command = options[:test_command]
       @pre_check = options[:pre_check]
-      @pretty = options[:pretty]
       @env_variables = options[:env_variables]
       @index = index
       @queue_connection_params = options[:queue_connection_params]
@@ -65,8 +65,13 @@ module ParallelCucumber
         if @setup_worker
           mm, ss = time_it do
             @logger.info('Setup running')
-            success = Helper::Command.exec_command(env, 'setup', @setup_worker, @log_file, @logger, @log_decoration)
-            @logger.warn('Setup finished with error') unless success
+            success = Helper::Command.exec_command(
+              env, 'setup', @setup_worker, @log_file, @logger, @log_decoration, @setup_timeout
+            )
+            unless success
+              @logger.warn('Setup failed: quitting immediately')
+              break
+            end
           end
           @logger.debug("Setup took #{mm} minutes #{ss} seconds")
         end
@@ -86,7 +91,7 @@ module ParallelCucumber
               )
               unless continue
                 @logger.error('Pre-check failed: quitting immediately')
-                exit 1
+                break
               end
             end
             @batch_size.times do
@@ -94,7 +99,7 @@ module ParallelCucumber
               tests << queue.dequeue
             end
             tests.compact!
-            tests.sort!
+            tests.sort! # Workaround for https://github.com/cucumber/cucumber-ruby/issues/952
             break if tests.empty?
 
             batch_id = "#{Time.now.to_i}-#{@index}"
@@ -106,7 +111,7 @@ module ParallelCucumber
               FileUtils.rm_rf(test_batch_dir)
               FileUtils.mkpath(test_batch_dir)
               f = "#{test_batch_dir}/test_state.json"
-              cmd = "#{@test_command} #{@pretty} --format json --out #{f} #{@cucumber_options} "
+              cmd = "#{@test_command} --format json --out #{f} #{@cucumber_options} "
               batch_env = {
                 :TEST_BATCH_ID.to_s => batch_id,
                 :TEST_BATCH_DIR.to_s => test_batch_dir,
