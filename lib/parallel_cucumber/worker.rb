@@ -29,7 +29,6 @@ module ParallelCucumber
       @cucumber_options = options[:cucumber_options]
       @test_command = options[:test_command]
       @pre_check = options[:pre_check]
-      @pretty = options[:pretty]
       @env_variables = options[:env_variables]
       @index = index
       @queue_connection_params = options[:queue_connection_params]
@@ -100,7 +99,7 @@ module ParallelCucumber
               tests << queue.dequeue
             end
             tests.compact!
-            tests.sort!
+            tests.sort! # Workaround for https://github.com/cucumber/cucumber-ruby/issues/952
             break if tests.empty?
 
             batch_id = "#{Time.now.to_i}-#{@index}"
@@ -112,7 +111,7 @@ module ParallelCucumber
               FileUtils.rm_rf(test_batch_dir)
               FileUtils.mkpath(test_batch_dir)
               f = "#{test_batch_dir}/test_state.json"
-              cmd = "#{@test_command} #{@pretty} --format json --out #{f} #{@cucumber_options} "
+              cmd = "#{@test_command} --format json --out #{f} #{@cucumber_options} "
               batch_env = {
                 :TEST_BATCH_ID.to_s => batch_id,
                 :TEST_BATCH_DIR.to_s => test_batch_dir,
