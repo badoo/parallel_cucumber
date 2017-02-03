@@ -22,7 +22,7 @@ module ParallelCucumber
   class Worker
     include ParallelCucumber::Helper::Utils
 
-    def initialize(options, index)
+    def initialize(options, index, stdout_logger)
       @batch_size = options[:batch_size]
       @batch_timeout = options[:batch_timeout]
       @setup_timeout = options[:setup_timeout]
@@ -40,6 +40,7 @@ module ParallelCucumber
       @log_decoration = options[:log_decoration]
       @log_dir = options[:log_dir]
       @log_file = "#{@log_dir}/worker_#{index}.log"
+      @stdout_logger = stdout_logger # .sync writes only.
     end
 
     def start(env)
@@ -48,7 +49,7 @@ module ParallelCucumber
       File.delete(@log_file) if File.exist?(@log_file)
       File.open(@log_file, 'a') do |file_handle|
         file_handle.sync = true
-        @logger = ParallelCucumber::CustomLogger.new(MultiDelegator.delegate(:write, :close).to(STDOUT, file_handle))
+        @logger = ParallelCucumber::CustomLogger.new(file_handle)
         @logger.progname = "Worker-#{@index}"
         @logger.level = @debug ? ParallelCucumber::CustomLogger::DEBUG : ParallelCucumber::CustomLogger::INFO
 
@@ -62,6 +63,7 @@ module ParallelCucumber
         @logger.debug(<<-LOG)
         Additional environment variables: #{env.map { |k, v| "#{k}=#{v}" }.join(' ')}
         LOG
+        @logger.update(@stdout_logger)
 
         results = {}
         running_total = Hash.new(0)
@@ -88,9 +90,9 @@ module ParallelCucumber
             end
           end
           @logger.debug("Loop took #{loop_mm} minutes #{loop_ss} seconds")
+          @logger.update(@stdout_logger)
         ensure
           teardown(env)
-
           results[":worker-#{@index}"] = running_total
           results
         end
@@ -110,8 +112,9 @@ module ParallelCucumber
         running_totals(batch_results, running_total)
         results.merge!(batch_results)
       end
-
+    ensure
       @logger.debug("Batch #{batch_id} took #{batch_mm} minutes #{batch_ss} seconds")
+      @logger.update(@stdout_logger)
     end
 
     def precheck(env)
@@ -188,6 +191,7 @@ module ParallelCucumber
                         end
                       end
     ensure
+      @logger.update(@stdout_logger)
       FileUtils.rm_rf(test_batch_dir)
       batch_results
     end
@@ -201,7 +205,9 @@ module ParallelCucumber
         )
         @logger.warn('Teardown finished with error') unless success
       end
+    ensure
       @logger.debug("Teardown took #{mm} minutes #{ss} seconds")
+      @logger.update(@stdout_logger)
     end
 
     def setup(env)
@@ -216,7 +222,9 @@ module ParallelCucumber
           raise :setup_failed
         end
       end
+    ensure
       @logger.debug("Setup took #{mm} minutes #{ss} seconds")
+      @logger.update(@stdout_logger)
     end
 
     def parse_results(f)

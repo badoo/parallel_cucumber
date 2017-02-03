@@ -9,10 +9,15 @@ module ParallelCucumber
           logger << format(log_decoration['end'] + "\n", block_name) if log_decoration['end']
         end
 
-        def exec_command(env, desc, script, log_file, logger, log_decoration = {}, timeout = 30) # rubocop:disable Metrics/ParameterLists, Metrics/LineLength
-          file = File.open(log_file)
-          file.seek(0, File::SEEK_END)
-          full_script = "#{script} >>#{log_file} 2>&1"
+        def exec_command(env, desc, script, _log_file, logger, log_decoration = {}, timeout = 30) # rubocop:disable Metrics/ParameterLists, Metrics/LineLength
+          block_name = ''
+          if log_decoration['worker_block']
+            if log_decoration['start'] || log_decoration['end']
+              block_name = "#{"#{env['TEST_USER']}-w#{env['WORKER_INDEX']}>"} #{desc}"
+            end
+          end
+          logger << format(log_decoration['start'] + "\n", block_name) if log_decoration['start']
+          full_script = "#{script} 2>&1"
           env_string = env.map { |k, v| "#{k}=#{v}" }.sort.join(' ')
           message = <<-LOG
         Running command `#{full_script}` with environment variables: #{env_string}
@@ -25,14 +30,13 @@ module ParallelCucumber
               pin, pout, pstat = Open3.popen2e(env, full_script)
               logger.debug("Command has pid #{pstat[:pid]}")
               pin.close
-              out = pout.readlines.join("\n") # Not expecting anything in 'out' due to redirection, but...
+              out = pout.readlines.join
               pout.close
               pstat.value # N.B. Await process termination
-              "Command completed #{pstat.value} and expecting '#{out}' to be empty due to redirects"
+              "Command completed #{pstat.value}; output was:\n#{out}\n...output ends\n"
             end
-            logger.debug(completed)
-            # system("lsof #{log_file} >> #{log_file} 2>&1")
-            system("ps -axf | grep '#{pstat[:pid]}\\s' >> #{log_file}")
+            logger << completed
+            logger.debug(%x(ps -axf | grep '#{pstat[:pid]}\\s'))
             return pstat.value.success?
           rescue Timeout::Error
             pout.close
@@ -54,29 +58,14 @@ module ParallelCucumber
               logger.debug("About to reap root #{pstat[:pid]}")
               pstat.value # reap root - everything else should be reaped by init.
               logger.debug("Reaped root #{pstat[:pid]}")
-              # system("lsof #{log_file} >> #{log_file}")
-              logger.debug("Tried SIGKILL #{pstat[:pid]} - hopefully no processes still have #{log_file}!")
+              logger.debug("Tried SIGKILL #{pstat[:pid]}!")
             end
           rescue => e
             logger.debug("Exception #{pstat ? pstat[:pid] : "pstat=#{pstat}=nil"}")
             trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
             logger.error("Threw: for #{full_script}, caused #{trace}")
           ensure
-            # It's only logging - don't really care if we lose some, though it would be nice if we didn't.
-            if log_decoration['worker_block']
-              prefix = "#{env['TEST_USER']}-w#{env['WORKER_INDEX']}>"
-              block_name = ''
-              if log_decoration['start'] || log_decoration['end']
-                block_name = "#{prefix} #{desc}"
-                prefix = ''
-              end
-              message = ''
-              message << format(log_decoration['start'] + "\n", block_name) if log_decoration['start']
-              message << "#{prefix}#{file.readline}" until file.eof
-              message << format(log_decoration['end'] + "\n", block_name) if log_decoration['end']
-              logger << message
-              file.close
-            end
+            logger << format(log_decoration['end'] + "\n", block_name) if log_decoration['end']
           end
           logger.debug("Unusual termination for command: #{script}")
           nil
