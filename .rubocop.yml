@@ -19,3 +19,7 @@ Style/TernaryParentheses:
   Enabled: false
 Style/NumericPredicate:
   Enabled: false
+Style/CommandLiteral:
+  Enabled: false
+Style/IfUnlessModifier:
+  Enabled: false
