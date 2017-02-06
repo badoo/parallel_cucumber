@@ -14,8 +14,8 @@ module ParallelCucumber
     end
 
     def update(other_logger)
-      # Hopefully this will get complete ##teamcity chunks - since that's the aim of the game!
-      @logdev.dev.fsync
+      # TODO: This should write the #teamcity block wrapper: update(other_logger, 'qa-w12> precheck') etc.
+      @logdev.dev.fsync # Helpful, but inadequate: a child process might still have buffered stuff.
       other_logger.synch do |l|
         l << File.open(@logdev.filename || @logdev.dev.path) do |f|
           begin
@@ -25,7 +25,7 @@ module ParallelCucumber
               lines[0] = @incomplete_line + lines[0]
               @incomplete_line = nil
             end
-            unless lines.last.end_with?("\n", "\r")
+            unless lines.last && lines.last.end_with?("\n", "\r")
               @incomplete_line = lines.pop
             end
             lines.join
