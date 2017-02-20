@@ -66,21 +66,23 @@ module ParallelCucumber
         @logger.update(@stdout_logger)
 
         results = {}
+        # TODO: Replace running total with queues for passed, failed, unknown, skipped.
         running_total = Hash.new(0)
         begin
           setup(env)
 
           queue = ParallelCucumber::Helper::Queue.new(@queue_connection_params)
+          directed_queue = ParallelCucumber::Helper::Queue.new(@queue_connection_params, "_#{@index}")
           queue_tracker = Tracker.new(queue)
 
           loop_mm, loop_ss = time_it do
             loop do
-              break if queue.empty?
+              break if queue.empty? && directed_queue.empty?
               batch = []
               precheck(env)
               @batch_size.times do
-                # TODO: Handle recovery of dequeued tests, if a worker dies mid-processing.
-                batch << queue.dequeue
+                # TODO: Handle recovery of dequeued tests if a worker dies mid-processing, treating them as dangerous.
+                batch << (directed_queue.empty? ? queue : directed_queue).dequeue
               end
               batch.compact!
               batch.sort!
@@ -94,8 +96,8 @@ module ParallelCucumber
         ensure
           teardown(env)
           results[":worker-#{@index}"] = running_total
-          results
         end
+        results
       end
     end
 
@@ -124,7 +126,7 @@ module ParallelCucumber
       )
       return if continue
       @logger.error('Pre-check failed: quitting immediately')
-      raise :prechek_failed
+      raise :precheck_failed
     end
 
     def running_totals(batch_results, running_total)
