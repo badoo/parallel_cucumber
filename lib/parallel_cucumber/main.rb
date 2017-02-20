@@ -13,8 +13,8 @@ module ParallelCucumber
     end
 
     def run
-      queue = Helper::Queue.new(@options[:queue_connection_params])
       @logger.debug("Connecting to Queue: #{@options[:queue_connection_params]}")
+      queue = Helper::Queue.new(@options[:queue_connection_params])
 
       unless queue.empty?
         @logger.error("Queue '#{queue.name}' is not empty")
@@ -34,28 +34,51 @@ module ParallelCucumber
         exit(1)
       end
 
+      count = tests.count
+
+      if @options[:directed_tests]
+        @options[:directed_tests].each do |k, v|
+          mm, ss = time_it do
+            dry_run_report = Helper::Cucumber.dry_run_report(
+              @options[:cucumber_options],
+              [@options[:cucumber_args], v].flatten(1)
+            )
+            directed_tests = Helper::Cucumber.parse_json_report(dry_run_report).keys
+            if directed_tests.empty?
+              @logger.warn("Queue for #{k} is empty - nothing selected by #{v}")
+            else
+              @logger.debug("Connecting to Queue: _#{k}")
+              directed_queue = Helper::Queue.new(@options[:queue_connection_params], "_#{k}")
+              @logger.info("Adding #{directed_tests.count} tests to queue _#{k}")
+              directed_queue.enqueue(directed_tests)
+              tests -= directed_tests
+            end
+          end
+        end
+      end
+
       @logger.info("Adding #{tests.count} tests to Queue")
-      queue.enqueue(tests)
+      queue.enqueue(tests) unless tests.empty?
 
       if @options[:n] == 0
         @options[:n] = [1, @options[:env_variables].map { |_k, v| v.is_a?(Array) ? v.count : 0 }].flatten.max
         @logger.info("Inferred worker count #{@options[:n]} from env_variables option")
       end
 
-      number_of_workers = [@options[:n], tests.count].min
+      number_of_workers = [@options[:n], count].min
       unless number_of_workers == @options[:n]
         @logger.info(<<-LOG)
           Number of workers was overridden to #{number_of_workers}.
-          Was requested more workers (#{@options[:n]}) than tests (#{tests.count})".
+          Was requested more workers (#{@options[:n]}) than tests (#{count})".
         LOG
       end
 
-      if (@options[:batch_size] - 1) * number_of_workers >= tests.count
+      if (@options[:batch_size] - 1) * number_of_workers >= count
         original_batch_size = @options[:batch_size]
-        @options[:batch_size] = [(tests.count.to_f / number_of_workers).floor, 1].max
+        @options[:batch_size] = [(count.to_f / number_of_workers).floor, 1].max
         @logger.info(<<-LOG)
           Batch size was overridden to #{@options[:batch_size]}.
-          Presumably it will be more optimal for #{tests.count} tests and #{number_of_workers} workers
+          Presumably it will be more optimal for #{count} tests and #{number_of_workers} workers
           than #{original_batch_size}
         LOG
       end
@@ -67,13 +90,15 @@ module ParallelCucumber
                                              @options[:log_decoration]['worker_block'] || 'workers',
                                              @logger) do
           finished = []
-          Parallel.map(
+          map = Parallel.map(
             0...number_of_workers,
             in_processes: number_of_workers,
-            finish: -> (_, index, _) { @logger.synch.info("Finished: #{finished[index] = index} #{finished - [nil]}") }
+            finish: -> (_, ix, _) { @logger.synch { |l| l.info("Finished: #{finished[ix] = ix} #{finished - [nil]}") } }
           ) do |index|
             Worker.new(@options, index, @logger).start(env_for_worker(@options[:env_variables], index))
-          end.inject(:merge) # Returns hash of file:line to statuses + :worker-index to summary.
+          end
+          puts map
+          map.inject(:merge) # Returns hash of file:line to statuses + :worker-index to summary.
         end
         results ||= {}
         unrun = tests - results.keys

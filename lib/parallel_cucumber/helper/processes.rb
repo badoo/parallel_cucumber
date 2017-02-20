@@ -3,7 +3,7 @@ module ParallelCucumber
     module Processes
       class << self
         def ps_tree
-          ` ps -ax -o ppid= -o pid= -o lstart= -o command= `
+          `ps -ax -o ppid= -o pid= -o lstart= -o command=`
             .each_line.map { |l| l.strip.split(/ +/, 3) }.to_a
             .each_with_object({}) do |(ppid, pid, signature), tree|
             (tree[pid] ||= { children: [] })[:signature] = signature
@@ -33,8 +33,13 @@ module ParallelCucumber
         def descendants(pid, tree = nil, old_tree = nil, &block)
           tree ||= ps_tree
           old_tree ||= tree
-          old_tree[pid][:children].each { |c| descendants(c, tree, old_tree, &block) }
-          yield(pid) if tree[pid] && (tree[pid][:signature] == old_tree[pid][:signature])
+          old_tree_node = old_tree[pid]
+          unless old_tree_node
+            warn "== old tree node went missing - skipping subtree: #{pid} #{tree.fetch(pid, '≤ no subtree in new ≥')}"
+            return
+          end
+          old_tree_node.fetch(:children, []).each { |c| descendants(c, tree, old_tree, &block) }
+          yield(pid) if tree[pid] && (tree[pid][:signature] == old_tree_node[:signature])
         end
       end
     end

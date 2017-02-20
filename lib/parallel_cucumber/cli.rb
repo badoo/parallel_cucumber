@@ -62,6 +62,15 @@ module ParallelCucumber
           options[:cucumber_options] = cucumber_options
         end
 
+        opts.on('--directed-tests JSON', 'Direct tests to specific workers, e.g. {"0": "-t @head"}') do |json|
+          options[:directed_tests] = begin
+            JSON.parse(json)
+          rescue JSON::ParserError
+            puts 'Log block quoting not in JSON format. Did you forget to escape the quotes?'
+            raise
+          end
+        end
+
         opts.on('--test-command COMMAND',
                 "Command to run for test phase, default #{DEFAULTS[:test_command]}") do |test_command|
           options[:test_command] = test_command
