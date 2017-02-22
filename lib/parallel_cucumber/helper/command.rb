@@ -25,14 +25,16 @@ module ParallelCucumber
           logger.debug(message)
           pstat = nil
           pout = nil
+          out = nil
           begin
             completed = Timeout.timeout(timeout) do
               pin, pout, pstat = Open3.popen2e(env, full_script)
               logger.debug("Command has pid #{pstat[:pid]}")
               pin.close
-              out = pout.readlines.join
+              out = ''
+              pout.each_line { |l| out << l } # incremental version of out = pout.readlines.join
               pout.close
-              pstat.value # N.B. Await process termination
+              pstat.value # reap already-terminated child.
               "Command completed #{pstat.value}; output was:\n#{out}\n...output ends\n"
             end
             logger << completed
@@ -42,28 +44,31 @@ module ParallelCucumber
             pout.close
             logger.debug("Timeout, so trying SIGINT #{pstat[:pid]}")
             wait_sigint = 15
-            logger.error("Timeout #{timeout}s was reached. Sending SIGINT(2), then waiting up to #{wait_sigint}s")
+            output = out ? "\nBut output so far: ≤#{out}≥\n" : 'but no output so far'
+            logger.error("Timeout #{timeout}s was reached. Sending SIGINT(2), SIGKILL after #{wait_sigint}s.#{output}")
             tree = Helper::Processes.ps_tree
             begin
-              Helper::Processes.kill_tree('SIGINT', pstat[:pid].to_s, tree)
+              pid = pstat[:pid].to_s
+              Helper::Processes.kill_tree('SIGINT', pid, tree)
               timed_out = wait_sigint.times do |t|
-                break if Helper::Processes.all_pids_dead?(pstat[:pid].to_s, nil, tree)
-                logger.info("Wait dead #{t}")
+                break if Helper::Processes.all_pids_dead?(pid, nil, tree)
+                logger.error("Wait dead #{t} pid #{pid}")
                 sleep 1
               end
               if timed_out
-                logger.error("Process #{pstat[:pid]} lasted #{wait_sigint}s after SIGINT(2), so SIGKILL(9)! Fatality!")
-                Helper::Processes.kill_tree('SIGKILL', pstat[:pid].to_s, nil, tree)
+                logger.error("Process #{pid} lasted #{wait_sigint}s after SIGINT(2), so SIGKILL(9)! Fatality!")
+                Helper::Processes.kill_tree('SIGKILL', pid, nil, tree)
               end
-              logger.debug("About to reap root #{pstat[:pid]}")
+              logger.debug("About to reap root #{pid}")
               pstat.value # reap root - everything else should be reaped by init.
-              logger.debug("Reaped root #{pstat[:pid]}")
-              logger.debug("Tried SIGKILL #{pstat[:pid]}!")
+              logger.debug("Reaped root #{pid}")
+              logger.debug("Tried SIGKILL #{pid}!")
             end
           rescue => e
             logger.debug("Exception #{pstat ? pstat[:pid] : "pstat=#{pstat}=nil"}")
             trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
-            logger.error("Threw: for #{full_script}, caused #{trace}")
+            output = out ? "\nOutput: ≤#{out}≥\n" : 'but no output caught'
+            logger.error("Threw for #{full_script}, caused #{trace}#{output}")
           ensure
             logger << format(log_decoration['end'] + "\n", block_name) if log_decoration['end']
           end

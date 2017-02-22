@@ -12,17 +12,25 @@ module ParallelCucumber
         end
 
         def kill_tree(sig, root, tree = nil, old_tree = nil)
-          descendants(root, tree, old_tree) do |pid|
+          descendants(root, tree, old_tree) do |pid, node|
             begin
+              puts "Killing #{node}"
               Process.kill(sig, pid.to_i)
             rescue Errno::ESRCH
               nil # It's gone already? Hurrah!
             end
           end
+          # Let's kill pid unconditionally: descendants will go astray once reparented.
+          begin
+            puts "Killing #{root} just in case"
+            Process.kill(sig, root.to_i)
+          rescue Errno::ESRCH
+            nil # It's gone already? Hurrah!
+          end
         end
 
         def all_pids_dead?(root, tree = nil, old_tree = nil)
-          # Note: returns from THIS function as well as descendants: short-circuit evaluation.
+          # Note: returns from THIS function as well as descendants: short-circuit evaluation if any descendants remain.
           descendants(root, tree, old_tree) { return false }
           true
         end
@@ -35,11 +43,11 @@ module ParallelCucumber
           old_tree ||= tree
           old_tree_node = old_tree[pid]
           unless old_tree_node
-            warn "== old tree node went missing - skipping subtree: #{pid} #{tree.fetch(pid, '≤ no subtree in new ≥')}"
+            warn "== old tree node went missing - skipping subtree: #{pid}"
             return
           end
           old_tree_node.fetch(:children, []).each { |c| descendants(c, tree, old_tree, &block) }
-          yield(pid) if tree[pid] && (tree[pid][:signature] == old_tree_node[:signature])
+          yield(pid, old_tree_node) if tree[pid] && (tree[pid][:signature] == old_tree_node[:signature])
         end
       end
     end
