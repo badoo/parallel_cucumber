@@ -126,7 +126,7 @@ module ParallelCucumber
       )
       return if continue
       @logger.error('Pre-check failed: quitting immediately')
-      raise :precheck_failed
+      raise 'Pre-check failed: quitting immediately'
     end
 
     def running_totals(batch_results, running_total)
@@ -221,7 +221,7 @@ module ParallelCucumber
         )
         unless success
           @logger.warn('Setup failed: quitting immediately')
-          raise :setup_failed
+          raise 'Setup failed: quitting immediately'
         end
       end
     ensure
