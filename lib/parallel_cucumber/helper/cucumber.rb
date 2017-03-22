@@ -9,7 +9,7 @@ module ParallelCucumber
   module Helper
     module Cucumber
       class << self
-        def suitable_tests(options, arguments)
+        def selected_tests(options, arguments)
           dry_run_report = dry_run_report(options, arguments)
           parse_json_report(dry_run_report).keys
         end
