@@ -28,7 +28,11 @@ module ParallelCucumber
         exit(1)
       end
 
-      long_running_tests = Helper::Cucumber.selected_tests(@options[:cucumber_options], @options[:long_running_tests])
+      long_running_tests = if @options[:long_running_tests]
+                             Helper::Cucumber.selected_tests(@options[:cucumber_options], @options[:long_running_tests])
+                           else
+                             []
+                           end
       first_tests = long_running_tests & all_tests
       if !long_running_tests.empty? && first_tests.empty?
         @logger.info("No long running tests found: #{long_running_tests}")
