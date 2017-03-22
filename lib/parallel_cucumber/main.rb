@@ -21,20 +21,20 @@ module ParallelCucumber
         exit(1)
       end
 
-      all_tests = Helper::Cucumber.suitable_tests(@options[:cucumber_options], @options[:cucumber_args].join(' '))
+      all_tests = Helper::Cucumber.selected_tests(@options[:cucumber_options], @options[:cucumber_args].join(' '))
 
       if all_tests.empty?
         @logger.error('There are no tests to run')
         exit(1)
       end
 
-      long_running_tests = Helper::Cucumber.suitable_tests(@options[:cucumber_options], @options[:long_running_tests])
-      firsts_tests = long_running_tests & all_tests
-      if !long_running_tests.empty? && firsts_tests.empty?
+      long_running_tests = Helper::Cucumber.selected_tests(@options[:cucumber_options], @options[:long_running_tests])
+      first_tests = long_running_tests & all_tests
+      if !long_running_tests.empty? && first_tests.empty?
         @logger.info("No long running tests found: #{long_running_tests}")
       end
-      remaining_tests = (all_tests - firsts_tests).shuffle
-      tests = firsts_tests + remaining_tests
+      remaining_tests = (all_tests - first_tests).shuffle
+      tests = first_tests + remaining_tests
 
       @logger.info("Adding #{tests.count} tests to Queue")
       queue.enqueue(tests)
