@@ -162,6 +162,11 @@ module ParallelCucumber
           options[:debug] = debug
         end
 
+        help_message = 'Cucumber arguments for long-running-tests'
+        opts.on('--long-running-tests STRING', String, help_message) do |cucumber_args|
+          options[:long_running_tests] = cucumber_args
+        end
+
         opts.on('-v', '--version', 'Show version') do
           puts ParallelCucumber::VERSION
           exit 0

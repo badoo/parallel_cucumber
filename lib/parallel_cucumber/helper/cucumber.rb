@@ -9,27 +9,9 @@ module ParallelCucumber
   module Helper
     module Cucumber
       class << self
-        def dry_run_report(options, args)
-          options = options.dup
-          options = expand_profiles(options) unless config_file.nil?
-          options = remove_formatters(options)
-          content = nil
-
-          Tempfile.open(%w(dry-run .json)) do |f|
-            dry_run_options = "--dry-run --format json --out #{f.path}"
-
-            cmd = "cucumber #{options} #{dry_run_options} #{args.join(' ')}"
-            _stdout, stderr, status = Open3.capture3(cmd)
-            f.close
-
-            unless status == 0
-              cmd = "bundle exec #{cmd}" if ENV['BUNDLE_BIN_PATH']
-              raise("Can't generate dry run report: #{status}:\n\t#{cmd}\n\t#{stderr}")
-            end
-
-            content = File.read(f.path)
-          end
-          content
+        def selected_tests(options, arguments)
+          dry_run_report = dry_run_report(options, arguments)
+          parse_json_report(dry_run_report).keys
         end
 
         def batch_mapped_files(options, batch, env)
@@ -70,6 +52,29 @@ module ParallelCucumber
         end
 
         private
+
+        def dry_run_report(options, args)
+          options = options.dup
+          options = expand_profiles(options) unless config_file.nil?
+          options = remove_formatters(options)
+          content = nil
+
+          Tempfile.open(%w(dry-run .json)) do |f|
+            dry_run_options = "--dry-run --format json --out #{f.path}"
+
+            cmd = "cucumber #{options} #{dry_run_options} #{args}"
+            _stdout, stderr, status = Open3.capture3(cmd)
+            f.close
+
+            unless status == 0
+              cmd = "bundle exec #{cmd}" if ENV['BUNDLE_BIN_PATH']
+              raise("Can't generate dry run report: #{status}:\n\t#{cmd}\n\t#{stderr}")
+            end
+
+            content = File.read(f.path)
+          end
+          content
+        end
 
         def expand_profiles(options, env = {})
           e = ENV.to_h
