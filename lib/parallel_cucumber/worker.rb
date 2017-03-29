@@ -29,7 +29,6 @@ module ParallelCucumber
       @cucumber_options = options[:cucumber_options]
       @test_command = options[:test_command]
       @pre_check = options[:pre_check]
-      @pretty = options[:pretty]
       @env_variables = options[:env_variables]
       @index = index
       @queue_connection_params = options[:queue_connection_params]
@@ -42,13 +41,29 @@ module ParallelCucumber
       @log_file = "#{@log_dir}/worker_#{index}.log"
     end
 
+    def shut_logger
+      file_handle = { log_file: @log_file }
+
+      def file_handle.write(message)
+        File.open(self[:log_file], 'a') { |f| f << message }
+      rescue => e
+        STDERR.puts "Log failure: #{e} writing '#{message.to_s.chomp}' to #{self[:log_file]}"
+      end
+
+      def file_handle.close
+      end
+
+      file_handle
+    end
+
     def start(env)
       env = env.dup.merge!('WORKER_LOG' => @log_file)
 
       File.delete(@log_file) if File.exist?(@log_file)
-      File.open(@log_file, 'a') do |file_handle|
-        file_handle.sync = true
-        @logger = ParallelCucumber::CustomLogger.new(MultiDelegator.delegate(:write, :close).to(STDOUT, file_handle))
+
+      results = {}
+      begin
+        @logger = ParallelCucumber::CustomLogger.new(MultiDelegator.delegate(:write, :close).to(STDOUT, shut_logger))
         @logger.progname = "Worker-#{@index}"
         @logger.level = @debug ? ParallelCucumber::CustomLogger::DEBUG : ParallelCucumber::CustomLogger::INFO
 
@@ -63,7 +78,6 @@ module ParallelCucumber
         Additional environment variables: #{env.map { |k, v| "#{k}=#{v}" }.join(' ')}
         LOG
 
-        results = {}
         running_total = Hash.new(0)
         begin
           setup(env)
@@ -81,7 +95,7 @@ module ParallelCucumber
                 batch << queue.dequeue
               end
               batch.compact!
-              batch.sort!
+              batch.sort! # Workaround for https://github.com/cucumber/cucumber-ruby/issues/952
               break if batch.empty?
 
               run_batch(env, queue_tracker, results, running_total, batch)
@@ -89,12 +103,11 @@ module ParallelCucumber
           end
           @logger.debug("Loop took #{loop_mm} minutes #{loop_ss} seconds")
         ensure
-          teardown(env)
-
           results[":worker-#{@index}"] = running_total
-          results
+          teardown(env)
         end
       end
+      results
     end
 
     def run_batch(env, queue_tracker, results, running_total, tests)
@@ -152,12 +165,12 @@ module ParallelCucumber
     end
 
     def test_batch(batch_id, env, running_total, tests)
-      test_batch_dir = "/tmp/w-#{batch_id}"
+      test_batch_dir = "#{Dir.tmpdir}/w-#{batch_id}"
       FileUtils.rm_rf(test_batch_dir)
       FileUtils.mkpath(test_batch_dir)
 
       test_state = "#{test_batch_dir}/test_state.json"
-      cmd = "#{@test_command} #{@pretty} --format json --out #{test_state} #{@cucumber_options} "
+      cmd = "#{@test_command} --format json --out #{test_state} #{@cucumber_options} "
       batch_env = {
         :TEST_BATCH_ID.to_s => batch_id,
         :TEST_BATCH_DIR.to_s => test_batch_dir,
@@ -169,27 +182,22 @@ module ParallelCucumber
       res = ParallelCucumber::Helper::Command.exec_command(
         batch_env, 'batch', mapped_batch_cmd, @log_file, @logger, @log_decoration, @batch_timeout
       )
-      batch_results = if res.nil?
-                        {}
-                      else
-                        Helper::Command.wrap_block(@log_decoration, 'file copy', @logger) do
-                          # Use system cp -r because Ruby's has crap diagnostics in weird situations.
-                          # Copy files we might have renamed or moved
-                          file_map.each do |user, worker|
-                            unless worker == user
-                              cp_out = `cp -Rv #{worker} #{user} 2>&1`
-                              @logger.debug("Copy of #{worker} to #{user} said: #{cp_out}")
-                            end
-                          end
-                          # Copy everything else too, in case it's interesting.
-                          cp_out = `cp -Rv #{test_batch_dir}/*  #{@log_dir} 2>&1`
-                          @logger.debug("Copy of #{test_batch_dir}/* to #{@log_dir} said: #{cp_out}")
-                          parse_results(test_state)
-                        end
-                      end
+      if res.nil?
+        {}
+      else
+        Helper::Command.wrap_block(@log_decoration, 'file copy', @logger) do
+          # Copy files we might have renamed or moved
+          file_map.each do |user, worker|
+            next if worker == user
+            Helper::Processes.cp_rv(worker, user, @logger)
+          end
+          # Copy everything else too, in case it's interesting.
+          Helper::Processes.cp_rv("#{test_batch_dir}/*", @log_dir, @logger)
+          parse_results(test_state)
+        end
+      end
     ensure
       FileUtils.rm_rf(test_batch_dir)
-      batch_results
     end
 
     def teardown(env)
