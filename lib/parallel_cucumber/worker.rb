@@ -152,7 +152,7 @@ module ParallelCucumber
     end
 
     def test_batch(batch_id, env, running_total, tests)
-      test_batch_dir = "/tmp/w-#{batch_id}"
+      test_batch_dir = "#{Dir.tmpdir}/w-#{batch_id}"
       FileUtils.rm_rf(test_batch_dir)
       FileUtils.mkpath(test_batch_dir)
 
@@ -177,12 +177,12 @@ module ParallelCucumber
                           # Copy files we might have renamed or moved
                           file_map.each do |user, worker|
                             unless worker == user
-                              cp_out = `cp -Rv #{worker} #{user} 2>&1`
+                              cp_out = FileUtils.cp_r("#{worker}", "#{user}", verbose: true) #`cp -Rv #{worker} #{user} 2>&1`
                               @logger.debug("Copy of #{worker} to #{user} said: #{cp_out}")
                             end
                           end
                           # Copy everything else too, in case it's interesting.
-                          cp_out = `cp -Rv #{test_batch_dir}/*  #{@log_dir} 2>&1`
+                          cp_out = FileUtils.cp_r("#{test_batch_dir}/*", "#{@log_dir}", verbose: true) #`cp -Rv #{test_batch_dir}/*  #{@log_dir} 2>&1`
                           @logger.debug("Copy of #{test_batch_dir}/* to #{@log_dir} said: #{cp_out}")
                           parse_results(test_state)
                         end
