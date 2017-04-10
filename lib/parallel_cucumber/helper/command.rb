@@ -31,11 +31,13 @@ module ParallelCucumber
               pin, pout, pstat = Open3.popen2e(env, full_script)
               logger.debug("Command has pid #{pstat[:pid]}")
               pin.close
-              out = ''
+              out = []
               pout.each_line { |l| out << l } # incremental version of out = pout.readlines.join
               pout.close
               pstat.value # reap already-terminated child.
-              "Command completed #{pstat.value}; output was:\n#{out}\n...output ends\n"
+              ["Command completed #{pstat.value}; output was (lines=#{out.count}):",
+               out.join,
+               "...output #{pstat.value} ends\n"].join("\n")
             end
             logger << completed
             logger.debug(%x(ps -axf | grep '#{pstat[:pid]}\\s'))

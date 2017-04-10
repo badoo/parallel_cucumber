@@ -93,6 +93,9 @@ module ParallelCucumber
           end
           @logger.debug("Loop took #{loop_mm} minutes #{loop_ss} seconds")
           @logger.update(@stdout_logger)
+        rescue => e
+          trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
+          @logger.error("Threw: #{e.inspect} #{trace}")
         ensure
           teardown(env)
           results[":worker-#{@index}"] = running_total
@@ -220,7 +223,7 @@ module ParallelCucumber
           env, 'setup', @setup_worker, @log_file, @logger, @log_decoration, @setup_timeout
         )
         unless success
-          @logger.warn('Setup failed: quitting immediately')
+          @logger.warn("Setup failed: #{@index} quitting immediately")
           raise 'Setup failed: quitting immediately'
         end
       end
