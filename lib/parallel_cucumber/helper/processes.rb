@@ -3,7 +3,7 @@ module ParallelCucumber
     module Processes
       class << self
         def ps_tree
-          if Platform.windows?
+          if RUBY_PLATFORM =~ /mswin|mingw|migw32|cygwin|x64-mingw32/
             system('powershell scripts/process_tree.ps1')
           else
             ` ps -ax -o ppid= -o pid= -o lstart= -o command= `
@@ -16,7 +16,7 @@ module ParallelCucumber
         end
 
         def kill_tree(sig, root, tree = nil, old_tree = nil)
-          if Platform.windows?
+          if RUBY_PLATFORM =~ /mswin|mingw|migw32|cygwin|x64-mingw32/
             system("taskkill /pid #{root} /T")
           else
             descendants(root, tree, old_tree) do |pid|
