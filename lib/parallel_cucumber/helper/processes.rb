@@ -3,20 +3,29 @@ module ParallelCucumber
     module Processes
       class << self
         def ps_tree
-          ` ps -ax -o ppid= -o pid= -o lstart= -o command= `
-            .each_line.map { |l| l.strip.split(/ +/, 3) }.to_a
-            .each_with_object({}) do |(ppid, pid, signature), tree|
-            (tree[pid] ||= { children: [] })[:signature] = signature
-            (tree[ppid] ||= { children: [] })[:children] << pid
+          if RUBY_PLATFORM =~ /mswin|mingw|migw32|cygwin|x64-mingw32/
+            system('powershell scripts/process_tree.ps1')
+          else
+            ` ps -ax -o ppid= -o pid= -o lstart= -o command= `
+              .each_line.map { |l| l.strip.split(/ +/, 3) }.to_a
+              .each_with_object({}) do |(ppid, pid, signature), tree|
+              (tree[pid] ||= { children: [] })[:signature] = signature
+              (tree[ppid] ||= { children: [] })[:children] << pid
+            end
           end
         end
 
         def kill_tree(sig, root, tree = nil, old_tree = nil)
-          descendants(root, tree, old_tree) do |pid|
-            begin
-              Process.kill(sig, pid.to_i)
-            rescue Errno::ESRCH
-              nil # It's gone already? Hurrah!
+          if RUBY_PLATFORM =~ /mswin|mingw|migw32|cygwin|x64-mingw32/
+            system("taskkill /pid #{root} /T")
+          else
+            descendants(root, tree, old_tree) do |pid|
+              begin
+                puts(sig, pid.to_i)
+                Process.kill(sig, pid.to_i)
+              rescue Errno::ESRCH
+                nil # It's gone already? Hurrah!
+              end
             end
           end
         end
