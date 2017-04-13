@@ -10,9 +10,14 @@ module ParallelCucumber
         end
 
         def exec_command(env, desc, script, log_file, logger, log_decoration = {}, timeout = 30) # rubocop:disable Metrics/ParameterLists, Metrics/LineLength
-          file = File.open(log_file)
-          file.seek(0, File::SEEK_END)
-          full_script = "#{script} >>#{log_file} 2>&1"
+          begin
+            file = File.open(log_file)
+            file.seek(0, File::SEEK_END)
+          rescue => e
+            trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
+            logger.error("Threw: for #{file}, #{log_file}, caused #{trace}")
+          end
+          full_script = "#{script}>>#{log_file} 2>&1"
           env_string = env.map { |k, v| "#{k}=#{v}" }.sort.join(' ')
           message = <<-LOG
         Running command `#{full_script}` with environment variables: #{env_string}
@@ -32,7 +37,7 @@ module ParallelCucumber
             end
             logger.debug(completed)
             # system("lsof #{log_file} >> #{log_file} 2>&1")
-            system("ps -axf | grep '#{pstat[:pid]}\\s' >> #{log_file}")
+            # system("ps -axf | grep '#{pstat[:pid]}\\s' >> #{log_file}")
             return pstat.value.success?
           rescue Timeout::Error
             pout.close

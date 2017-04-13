@@ -187,13 +187,19 @@ module ParallelCucumber
                           # Copy files we might have renamed or moved
                           file_map.each do |user, worker|
                             next if worker == user
-                            cp_out =
-                              FileUtils.cp_r(worker.to_s, user.to_s, verbose: true) # `cp -Rv #{worker} #{user} 2>&1`
+                            cp_out = if RUBY_PLATFORM =~ /mswin|mingw|migw32|cygwin|x64-mingw32/
+                                       `powershell cp #{worker} #{user} -recurse 2>&1`
+                                     else
+                                       `cp -Rv #{worker} #{user} 2>&1`
+                                     end
                             @logger.debug("Copy of #{worker} to #{user} said: #{cp_out}")
                           end
                           # Copy everything else too, in case it's interesting.
-                          # `cp -Rv #{test_batch_dir}/*  #{@log_dir} 2>&1`
-                          cp_out = FileUtils.cp_r("#{test_batch_dir}/*", @log_dir.to_s, verbose: true)
+                          cp_out = if RUBY_PLATFORM =~ /mswin|mingw|migw32|cygwin|x64-mingw32/
+                                     `powershell cp #{test_batch_dir}/*  #{@log_dir} -recurse 2>&1`
+                                   else
+                                     `cp -Rv #{test_batch_dir}/*  #{@log_dir} 2>&1`
+                                   end
                           @logger.debug("Copy of #{test_batch_dir}/* to #{@log_dir} said: #{cp_out}")
                           parse_results(test_state)
                         end
