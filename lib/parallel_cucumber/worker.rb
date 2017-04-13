@@ -46,8 +46,18 @@ module ParallelCucumber
       env = env.dup.merge!('WORKER_LOG' => @log_file)
 
       File.delete(@log_file) if File.exist?(@log_file)
-      File.open(@log_file, 'a') do |file_handle|
-        file_handle.sync = true
+      begin
+        file_handle = { log_file: @log_file }
+
+        def file_handle.write(message)
+          File.open(self[:log_file], 'a') { |f| f << message }
+        rescue => e
+          STDERR.puts "Log failure: #{e} writing '#{message}' to #{self[:log_file]}"
+        end
+
+        def file_handle.close
+        end
+
         @logger = ParallelCucumber::CustomLogger.new(MultiDelegator.delegate(:write, :close).to(STDOUT, file_handle))
         @logger.progname = "Worker-#{@index}"
         @logger.level = @debug ? ParallelCucumber::CustomLogger::DEBUG : ParallelCucumber::CustomLogger::INFO
@@ -176,13 +186,14 @@ module ParallelCucumber
                           # Use system cp -r because Ruby's has crap diagnostics in weird situations.
                           # Copy files we might have renamed or moved
                           file_map.each do |user, worker|
-                            unless worker == user
-                              cp_out = FileUtils.cp_r("#{worker}", "#{user}", verbose: true) #`cp -Rv #{worker} #{user} 2>&1`
-                              @logger.debug("Copy of #{worker} to #{user} said: #{cp_out}")
-                            end
+                            next if worker == user
+                            cp_out =
+                              FileUtils.cp_r(worker.to_s, user.to_s, verbose: true) # `cp -Rv #{worker} #{user} 2>&1`
+                            @logger.debug("Copy of #{worker} to #{user} said: #{cp_out}")
                           end
                           # Copy everything else too, in case it's interesting.
-                          cp_out = FileUtils.cp_r("#{test_batch_dir}/*", "#{@log_dir}", verbose: true) #`cp -Rv #{test_batch_dir}/*  #{@log_dir} 2>&1`
+                          # `cp -Rv #{test_batch_dir}/*  #{@log_dir} 2>&1`
+                          cp_out = FileUtils.cp_r("#{test_batch_dir}/*", @log_dir.to_s, verbose: true)
                           @logger.debug("Copy of #{test_batch_dir}/* to #{@log_dir} said: #{cp_out}")
                           parse_results(test_state)
                         end
