@@ -7,7 +7,11 @@ module ParallelCucumber
         end
 
         def cp_rv(source, dest, logger = nil)
-          cp_out = ms_windows? ? %x(powershell cp #{source} #{dest} -recurse 2>&1) : %x(cp -Rv #{source} #{dest} 2>&1)
+          cp_out = if ms_windows?
+                     %x(powershell cp #{source} #{dest} -recurse -force 2>&1)
+                   else
+                     %x(cp -Rv #{source} #{dest} 2>&1)
+                   end
           puts "== cp_rv #{source} to #{dest} said: #{cp_out}"
           logger.debug("Copy of #{source} to #{dest} said: #{cp_out}") if logger
         end
