@@ -62,7 +62,7 @@ module ParallelCucumber
           Tempfile.open(%w(dry-run .json)) do |f|
             dry_run_options = "--dry-run --format json --out #{f.path}"
 
-            cmd = "cucumber #{options} #{dry_run_options} #{args.join(' ')}"
+            cmd = "cucumber #{options} #{dry_run_options} #{args}"
             _stdout, stderr, status = Open3.capture3(cmd)
             f.close
 

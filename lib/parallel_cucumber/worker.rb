@@ -2,10 +2,6 @@ require 'English'
 require 'timeout'
 
 module ParallelCucumber
-  def ms_windows?
-    RUBY_PLATFORM =~ /mswin|mingw|migw32|cygwin/
-  end
-
   class Tracker
     def initialize(queue)
       @queue = queue
@@ -44,12 +40,6 @@ module ParallelCucumber
       @log_decoration = options[:log_decoration]
       @log_dir = options[:log_dir]
       @log_file = "#{@log_dir}/worker_#{index}.log"
-    end
-
-    def cp_rv(source, dest)
-      cp_out = ms_windows? ? %x(powershell cp #{source} #{dest} -recurse 2>&1) : %x(cp -Rv #{source} #{dest} 2>&1)
-      puts "== cp_rv #{source} to #{dest} said: #{cp_out}"
-      @logger.debug("Copy of #{source} to #{dest} said: #{cp_out}")
     end
 
     def start(env)
@@ -198,10 +188,10 @@ module ParallelCucumber
                           # Copy files we might have renamed or moved
                           file_map.each do |user, worker|
                             next if worker == user
-                            cp_rv(worker, user)
+                            Helper::Processes.cp_rv(worker, user, @logger)
                           end
                           # Copy everything else too, in case it's interesting.
-                          cp_rv("#{test_batch_dir}/*", @log_dir)
+                          Helper::Processes.cp_rv("#{test_batch_dir}/*", @log_dir, @logger)
                           parse_results(test_state)
                         end
                       end
