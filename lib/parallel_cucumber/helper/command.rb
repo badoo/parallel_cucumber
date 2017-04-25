@@ -17,7 +17,7 @@ module ParallelCucumber
             trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
             logger.error("Threw: for #{file}, #{log_file}, caused #{trace}")
           end
-          full_script = "#{script}>>#{log_file} 2>&1"
+          full_script = "#{script} >>#{log_file} 2>&1"
           env_string = env.map { |k, v| "#{k}=#{v}" }.sort.join(' ')
           message = <<-LOG
         Running command `#{full_script}` with environment variables: #{env_string}

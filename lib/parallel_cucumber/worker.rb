@@ -2,6 +2,10 @@ require 'English'
 require 'timeout'
 
 module ParallelCucumber
+  def ms_windows?
+    RUBY_PLATFORM =~ /mswin|mingw|migw32|cygwin/
+  end
+
   class Tracker
     def initialize(queue)
       @queue = queue
@@ -40,6 +44,12 @@ module ParallelCucumber
       @log_decoration = options[:log_decoration]
       @log_dir = options[:log_dir]
       @log_file = "#{@log_dir}/worker_#{index}.log"
+    end
+
+    def cp_rv(source, dest)
+      cp_out = ms_windows? ? %x(powershell cp #{source} #{dest} -recurse 2>&1) : %x(cp -Rv #{source} #{dest} 2>&1)
+      puts "== cp_rv #{source} to #{dest} said: #{cp_out}"
+      @logger.debug("Copy of #{source} to #{dest} said: #{cp_out}")
     end
 
     def start(env)
@@ -183,24 +193,15 @@ module ParallelCucumber
                         {}
                       else
                         Helper::Command.wrap_block(@log_decoration, 'file copy', @logger) do
+                          puts "== #{test_batch_dir} #{%x(dir #{test_batch_dir.tr('/', '\\')})} -===="
                           # Use system cp -r because Ruby's has crap diagnostics in weird situations.
                           # Copy files we might have renamed or moved
                           file_map.each do |user, worker|
                             next if worker == user
-                            cp_out = if RUBY_PLATFORM =~ /mswin|mingw|migw32|cygwin|x64-mingw32/
-                                       `powershell cp #{worker} #{user} -recurse 2>&1`
-                                     else
-                                       `cp -Rv #{worker} #{user} 2>&1`
-                                     end
-                            @logger.debug("Copy of #{worker} to #{user} said: #{cp_out}")
+                            cp_rv(worker, user)
                           end
                           # Copy everything else too, in case it's interesting.
-                          cp_out = if RUBY_PLATFORM =~ /mswin|mingw|migw32|cygwin|x64-mingw32/
-                                     `powershell cp #{test_batch_dir}/*  #{@log_dir} -recurse 2>&1`
-                                   else
-                                     `cp -Rv #{test_batch_dir}/*  #{@log_dir} 2>&1`
-                                   end
-                          @logger.debug("Copy of #{test_batch_dir}/* to #{@log_dir} said: #{cp_out}")
+                          cp_rv("#{test_batch_dir}/*", @log_dir)
                           parse_results(test_state)
                         end
                       end

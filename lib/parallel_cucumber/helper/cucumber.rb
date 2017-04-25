@@ -34,7 +34,7 @@ module ParallelCucumber
                 next
               end
               steps = [background['steps'], scenario['steps']].flatten.compact
-              status = case
+              status = case # rubocop:disable Style/EmptyCaseCondition
                        when steps.map { |step| step['result'] }.all? { |result| result['status'] == 'skipped' }
                          Status::SKIPPED
                        when steps.map { |step| step['result'] }.any? { |result| result['status'] == 'failed' }
@@ -62,7 +62,7 @@ module ParallelCucumber
           Tempfile.open(%w(dry-run .json)) do |f|
             dry_run_options = "--dry-run --format json --out #{f.path}"
 
-            cmd = "cucumber #{options} #{dry_run_options} #{args}"
+            cmd = "cucumber #{options} #{dry_run_options} #{args.join(' ')}"
             _stdout, stderr, status = Open3.capture3(cmd)
             f.close
 
