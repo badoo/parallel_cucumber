@@ -35,7 +35,6 @@ module ParallelCucumber
           else
             descendants(root, tree, old_tree) do |pid|
               begin
-                puts(sig, pid.to_i)
                 Process.kill(sig, pid.to_i)
               rescue Errno::ESRCH
                 nil # It's gone already? Hurrah!

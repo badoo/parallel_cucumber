@@ -9,7 +9,6 @@ Example: parallel_cucumber -n 4 -o "-f pretty -f html -o report.html" examples/i
     -o, --cucumber-options "OPTIONS" Run cucumber with these options
         --test-command COMMAND       Command to run for test phase, default cucumber
         --pre-batch-check COMMAND    Command causing worker to quit on exit failure
-        --no-pretty                  Suppress the default 'pretty' formatter directed at stdout
         --log-dir DIR                Directory for worker logfiles
         --log-decoration JSON        Block quoting for logs, e.g. {start: "#start %s", end: "#end %s"}
         --summary JSON               Summary files, e.g. {failed: "./failed.txt", unknown: "./unknown.txt"}

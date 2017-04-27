@@ -72,7 +72,6 @@ module ParallelCucumber
             end
 
             content = File.read(f.path)
-            f.close
           end
           content
         end

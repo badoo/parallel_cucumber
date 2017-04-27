@@ -42,6 +42,21 @@ module ParallelCucumber
       @log_file = "#{@log_dir}/worker_#{index}.log"
     end
 
+    def shut_logger
+      file_handle = { log_file: @log_file }
+
+      def file_handle.write(message)
+        File.open(self[:log_file], 'a') { |f| f << message }
+      rescue => e
+        STDERR.puts "Log failure: #{e} writing '#{message}' to #{self[:log_file]}"
+      end
+
+      def file_handle.close
+      end
+
+      file_handle
+    end
+
     def start(env)
       env = env.dup.merge!('WORKER_LOG' => @log_file)
 
@@ -49,18 +64,7 @@ module ParallelCucumber
 
       results = {}
       begin
-        file_handle = { log_file: @log_file }
-
-        def file_handle.write(message)
-          File.open(self[:log_file], 'a') { |f| f << message }
-        rescue => e
-          STDERR.puts "Log failure: #{e} writing '#{message}' to #{self[:log_file]}"
-        end
-
-        def file_handle.close
-        end
-
-        @logger = ParallelCucumber::CustomLogger.new(MultiDelegator.delegate(:write, :close).to(STDOUT, file_handle))
+        @logger = ParallelCucumber::CustomLogger.new(MultiDelegator.delegate(:write, :close).to(STDOUT, shut_logger))
         @logger.progname = "Worker-#{@index}"
         @logger.level = @debug ? ParallelCucumber::CustomLogger::DEBUG : ParallelCucumber::CustomLogger::INFO
 
@@ -184,7 +188,6 @@ module ParallelCucumber
                         {}
                       else
                         Helper::Command.wrap_block(@log_decoration, 'file copy', @logger) do
-                          puts "== #{test_batch_dir} #{%x(dir #{test_batch_dir.tr('/', '\\')})} -===="
                           # Use system cp -r because Ruby's has crap diagnostics in weird situations.
                           # Copy files we might have renamed or moved
                           file_map.each do |user, worker|
