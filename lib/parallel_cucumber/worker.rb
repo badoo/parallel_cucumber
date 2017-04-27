@@ -46,6 +46,8 @@ module ParallelCucumber
       env = env.dup.merge!('WORKER_LOG' => @log_file)
 
       File.delete(@log_file) if File.exist?(@log_file)
+
+      results = {}
       begin
         file_handle = { log_file: @log_file }
 
@@ -73,7 +75,6 @@ module ParallelCucumber
         Additional environment variables: #{env.map { |k, v| "#{k}=#{v}" }.join(' ')}
         LOG
 
-        results = {}
         running_total = Hash.new(0)
         begin
           setup(env)
@@ -99,11 +100,11 @@ module ParallelCucumber
           end
           @logger.debug("Loop took #{loop_mm} minutes #{loop_ss} seconds")
         ensure
-          teardown(env)
-
           results[":worker-#{@index}"] = running_total
-          results
+          teardown(env)
         end
+      ensure
+        results
       end
     end
 
