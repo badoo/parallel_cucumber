@@ -48,7 +48,7 @@ module ParallelCucumber
       def file_handle.write(message)
         File.open(self[:log_file], 'a') { |f| f << message }
       rescue => e
-        STDERR.puts "Log failure: #{e} writing '#{message}' to #{self[:log_file]}"
+        STDERR.puts "Log failure: #{e} writing '#{message.to_s.chomp}' to #{self[:log_file]}"
       end
 
       def file_handle.close
