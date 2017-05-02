@@ -82,7 +82,7 @@ module ParallelCucumber
             in_threads: number_of_workers,
             finish: -> (_, index, _) { @logger.info("Finished: #{finished[index] = index} #{finished - [nil]}") }
           ) do |index|
-            Worker.new(@options, index).start(env_for_worker(@options[:env_variables], index))
+            ParallelCucumber::Worker.new(@options, index).start(env_for_worker(@options[:env_variables], index))
           end.inject(:merge) # Returns hash of file:line to statuses + :worker-index to summary.
         end
         results ||= {}

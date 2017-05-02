@@ -107,9 +107,8 @@ module ParallelCucumber
           results[":worker-#{@index}"] = running_total
           teardown(env)
         end
-      ensure
-        results
       end
+      results
     end
 
     def run_batch(env, queue_tracker, results, running_total, tests)
@@ -184,24 +183,23 @@ module ParallelCucumber
       res = ParallelCucumber::Helper::Command.exec_command(
         batch_env, 'batch', mapped_batch_cmd, @log_file, @logger, @log_decoration, @batch_timeout
       )
-      batch_results = if res.nil?
-                        {}
-                      else
-                        Helper::Command.wrap_block(@log_decoration, 'file copy', @logger) do
-                          # Use system cp -r because Ruby's has crap diagnostics in weird situations.
-                          # Copy files we might have renamed or moved
-                          file_map.each do |user, worker|
-                            next if worker == user
-                            Helper::Processes.cp_rv(worker, user, @logger)
-                          end
-                          # Copy everything else too, in case it's interesting.
-                          Helper::Processes.cp_rv("#{test_batch_dir}/*", @log_dir, @logger)
-                          parse_results(test_state)
-                        end
-                      end
+      if res.nil?
+        {}
+      else
+        Helper::Command.wrap_block(@log_decoration, 'file copy', @logger) do
+          # Use system cp -r because Ruby's has crap diagnostics in weird situations.
+          # Copy files we might have renamed or moved
+          file_map.each do |user, worker|
+            next if worker == user
+            Helper::Processes.cp_rv(worker, user, @logger)
+          end
+          # Copy everything else too, in case it's interesting.
+          Helper::Processes.cp_rv("#{test_batch_dir}/*", @log_dir, @logger)
+          parse_results(test_state)
+        end
+      end
     ensure
       FileUtils.rm_rf(test_batch_dir)
-      batch_results
     end
 
     def teardown(env)
