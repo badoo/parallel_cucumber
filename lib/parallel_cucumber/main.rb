@@ -52,9 +52,13 @@ module ParallelCucumber
       unless number_of_workers == @options[:n]
         @logger.info(<<-LOG)
           Number of workers was overridden to #{number_of_workers}.
-          Was requested more workers (#{@options[:n]}) than tests (#{tests.count})".
+          More workers (#{@options[:n]}) requested than tests (#{tests.count})".
         LOG
       end
+
+      @logger.info(<<-LOG)
+        Number of workers is #{number_of_workers}.
+      LOG
 
       if (@options[:batch_size] - 1) * number_of_workers >= tests.count
         original_batch_size = @options[:batch_size]
@@ -75,10 +79,10 @@ module ParallelCucumber
           finished = []
           Parallel.map(
             0...number_of_workers,
-            in_processes: number_of_workers,
+            in_threads: number_of_workers,
             finish: -> (_, index, _) { @logger.info("Finished: #{finished[index] = index} #{finished - [nil]}") }
           ) do |index|
-            Worker.new(@options, index).start(env_for_worker(@options[:env_variables], index))
+            ParallelCucumber::Worker.new(@options, index).start(env_for_worker(@options[:env_variables], index))
           end.inject(:merge) # Returns hash of file:line to statuses + :worker-index to summary.
         end
         results ||= {}

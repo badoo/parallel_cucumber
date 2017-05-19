@@ -71,10 +71,7 @@ module ParallelCucumber
           options[:pre_check] = pre_check
         end
 
-        options[:pretty] = '--format pretty'
-        opts.on('--no-pretty', "Suppress the default 'pretty' formatter directed at stdout") do
-          options[:pretty] = ''
-        end
+        opts.on('--no-pretty', 'Now a no-op for compatibility there is no default pretty') {}
 
         opts.on('--log-dir DIR', 'Directory for worker logfiles') do |log_dir|
           options[:log_dir] = log_dir
@@ -108,7 +105,7 @@ module ParallelCucumber
         end
 
         help_message = "How many tests each worker takes from queue at once. Default is #{DEFAULTS[:batch_size]}"
-        opts.on('--batch-size SIZE', Integer, help_message.gsub(/\s+/, ' ').strip) do |batch_size|
+        opts.on('--batch-size SIZE', Integer, help_message) do |batch_size|
           if batch_size < 1
             puts "The minimum batch size is 1 but given: '#{batch_size}'"
             exit 1
@@ -116,14 +113,14 @@ module ParallelCucumber
           options[:batch_size] = batch_size
         end
 
-        help_message = <<-TEXT
+        help_message = <<-TEXT.gsub(/\s+/, ' ').strip
          `url,name`
           Url for TCP connection:
           `redis://[password]@[hostname]:[port]/[db]` (password, port and database are optional),
           for unix socket connection: `unix://[path to Redis socket]`.
           Default is redis://127.0.0.1:6379 and name is `queue`
         TEXT
-        opts.on('-q', '--queue-connection-params ARRAY', Array, help_message.gsub(/\s+/, ' ').strip) do |params|
+        opts.on('-q', '--queue-connection-params ARRAY', Array, help_message) do |params|
           options[:queue_connection_params] = params
         end
 
@@ -135,19 +132,19 @@ module ParallelCucumber
           options[:teardown_worker] = script
         end
 
-        help_message = <<-TEXT
+        help_message = <<-TEXT.gsub(/\s+/, ' ').strip
           Delay before next worker starting.
           Could be used for avoiding 'spikes' in CPU and RAM usage
           Default is #{DEFAULTS[:worker_delay]}
         TEXT
-        opts.on('--worker-delay SECONDS', Float, help_message.gsub(/\s+/, ' ').strip) do |worker_delay|
+        opts.on('--worker-delay SECONDS', Float, help_message) do |worker_delay|
           options[:worker_delay] = worker_delay
         end
 
-        help_message = <<-TEXT
+        help_message = <<-TEXT.gsub(/\s+/, ' ').strip
           Timeout for each batch of tests. Default is #{DEFAULTS[:batch_timeout]}
         TEXT
-        opts.on('--batch-timeout SECONDS', Float, help_message.gsub(/\s+/, ' ').strip) do |batch_timeout|
+        opts.on('--batch-timeout SECONDS', Float, help_message) do |batch_timeout|
           options[:batch_timeout] = batch_timeout
         end
 
