@@ -13,8 +13,8 @@ module ParallelCucumber
     end
 
     def run
-      queue = Helper::Queue.new(@options[:queue_connection_params])
       @logger.debug("Connecting to Queue: #{@options[:queue_connection_params]}")
+      queue = Helper::Queue.new(@options[:queue_connection_params])
 
       unless queue.empty?
         @logger.error("Queue '#{queue.name}' is not empty")
@@ -28,6 +28,8 @@ module ParallelCucumber
         exit(1)
       end
 
+      count = all_tests.count
+
       long_running_tests = if @options[:long_running_tests]
                              Helper::Cucumber.selected_tests(@options[:cucumber_options], @options[:long_running_tests])
                            else
@@ -35,24 +37,37 @@ module ParallelCucumber
                            end
       first_tests = long_running_tests & all_tests
       if !long_running_tests.empty? && first_tests.empty?
-        @logger.info("No long running tests found: #{long_running_tests}")
+        @logger.info("No long running tests found in common with main options: #{long_running_tests}")
       end
-      remaining_tests = (all_tests - first_tests).shuffle
-      tests = first_tests + remaining_tests
+      tests = first_tests + (all_tests - first_tests).shuffle
+
+      @options[:directed_tests].each do |k, v|
+        directed_tests = Helper::Cucumber.selected_tests(@options[:cucumber_options], v)
+        if directed_tests.empty?
+          @logger.warn("Queue for #{k} is empty - nothing selected by #{v}")
+        else
+          directed_tests = (directed_tests & long_running_tests) + (directed_tests - long_running_tests).shuffle
+          @logger.debug("Connecting to Queue: _#{k}")
+          directed_queue = Helper::Queue.new(@options[:queue_connection_params], "_#{k}")
+          @logger.info("Adding #{directed_tests.count} tests to queue _#{k}")
+          directed_queue.enqueue(directed_tests)
+          tests -= directed_tests
+        end
+      end
 
       @logger.info("Adding #{tests.count} tests to Queue")
-      queue.enqueue(tests)
+      queue.enqueue(tests) unless tests.empty?
 
       if @options[:n] == 0
         @options[:n] = [1, @options[:env_variables].map { |_k, v| v.is_a?(Array) ? v.count : 0 }].flatten.max
         @logger.info("Inferred worker count #{@options[:n]} from env_variables option")
       end
 
-      number_of_workers = [@options[:n], tests.count].min
+      number_of_workers = [@options[:n], count].min
       unless number_of_workers == @options[:n]
         @logger.info(<<-LOG)
           Number of workers was overridden to #{number_of_workers}.
-          More workers (#{@options[:n]}) requested than tests (#{tests.count})".
+          More workers (#{@options[:n]}) requested than tests (#{count})".
         LOG
       end
 
@@ -60,12 +75,12 @@ module ParallelCucumber
         Number of workers is #{number_of_workers}.
       LOG
 
-      if (@options[:batch_size] - 1) * number_of_workers >= tests.count
+      if (@options[:batch_size] - 1) * number_of_workers >= count
         original_batch_size = @options[:batch_size]
-        @options[:batch_size] = [(tests.count.to_f / number_of_workers).floor, 1].max
+        @options[:batch_size] = [(count.to_f / number_of_workers).floor, 1].max
         @logger.info(<<-LOG)
           Batch size was overridden to #{@options[:batch_size]}.
-          Presumably it will be more optimal for #{tests.count} tests and #{number_of_workers} workers
+          Presumably it will be more optimal for #{count} tests and #{number_of_workers} workers
           than #{original_batch_size}
         LOG
       end
@@ -77,13 +92,17 @@ module ParallelCucumber
                                              @options[:log_decoration]['worker_block'] || 'workers',
                                              @logger) do
           finished = []
-          Parallel.map(
+          map = Parallel.map(
             0...number_of_workers,
             in_threads: number_of_workers,
-            finish: -> (_, index, _) { @logger.info("Finished: #{finished[index] = index} #{finished - [nil]}") }
+            finish: -> (_, ix, _) { @logger.synch { |l| l.info("Finished: #{finished[ix] = ix} #{finished - [nil]}") } }
           ) do |index|
-            ParallelCucumber::Worker.new(@options, index).start(env_for_worker(@options[:env_variables], index))
-          end.inject(:merge) # Returns hash of file:line to statuses + :worker-index to summary.
+            ParallelCucumber::Worker
+              .new(@options, index, @logger)
+              .start(env_for_worker(@options[:env_variables], index))
+          end
+          puts map
+          map.inject(:merge) # Returns hash of file:line to statuses + :worker-index to summary.
         end
         results ||= {}
         unrun = tests - results.keys

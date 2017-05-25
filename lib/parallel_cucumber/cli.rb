@@ -10,6 +10,7 @@ module ParallelCucumber
       setup_timeout: 30,
       cucumber_options: '',
       debug: false,
+      directed_tests: {},
       log_dir: '.',
       log_decoration: {},
       env_variables: {},
@@ -60,6 +61,15 @@ module ParallelCucumber
 
         opts.on('-o', '--cucumber-options "OPTIONS"', 'Run cucumber with these options') do |cucumber_options|
           options[:cucumber_options] = cucumber_options
+        end
+
+        opts.on('--directed-tests JSON', 'Direct tests to specific workers, e.g. {"0": "-t @head"}') do |json|
+          options[:directed_tests] = begin
+            JSON.parse(json)
+          rescue JSON::ParserError
+            puts 'Log block quoting not in JSON format. Did you forget to escape the quotes?'
+            raise
+          end
         end
 
         opts.on('--test-command COMMAND',
