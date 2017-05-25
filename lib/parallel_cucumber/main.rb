@@ -21,7 +21,7 @@ module ParallelCucumber
         exit(1)
       end
 
-      all_tests = Helper::Cucumber.selected_tests(@options[:cucumber_options], @options[:cucumber_args].join(' '))
+      all_tests = Helper::Cucumber.selected_tests(@options[:cucumber_options], @options[:cucumber_args])
 
       if all_tests.empty?
         @logger.error('There are no tests to run')
