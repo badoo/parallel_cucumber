@@ -148,10 +148,10 @@ module ParallelCucumber
           options[:batch_timeout] = batch_timeout
         end
 
-        help_message = <<-TEXT
+        help_message = <<-TEXT.gsub(/\s+/, ' ').strip
           Timeout for each worker's set-up phase. Default is #{DEFAULTS[:setup_timeout]}
         TEXT
-        opts.on('--setup-timeout SECONDS', Float, help_message.gsub(/\s+/, ' ').strip) do |setup_timeout|
+        opts.on('--setup-timeout SECONDS', Float, help_message) do |setup_timeout|
           options[:setup_timeout] = setup_timeout
         end
 
@@ -160,8 +160,8 @@ module ParallelCucumber
         end
 
         help_message = 'Cucumber arguments for long-running-tests'
-        opts.on('--long-running-tests STRING', String, help_message) do |cucumber_args|
-          options[:long_running_tests] = cucumber_args
+        opts.on('--long-running-tests STRING', String, help_message) do |cucumber_long_run_args|
+          options[:long_running_tests] = cucumber_long_run_args
         end
 
         opts.on('-v', '--version', 'Show version') do
