@@ -42,7 +42,7 @@ module ParallelCucumber
       @stdout_logger = stdout_logger # .sync writes only.
     end
 
-    def shut_logger
+    def autoshutting_file
       file_handle = { log_file: @log_file }
 
       def file_handle.write(message)
@@ -54,6 +54,13 @@ module ParallelCucumber
       def file_handle.close
       end
 
+      def file_handle.fsync
+      end
+
+      def file_handle.path
+        self[:log_file]
+      end
+
       file_handle
     end
 
@@ -62,13 +69,13 @@ module ParallelCucumber
 
       File.delete(@log_file) if File.exist?(@log_file)
 
+      @logger = ParallelCucumber::CustomLogger.new(autoshutting_file)
+      @logger.progname = "Worker-#{@index}"
+      @logger.level = @debug ? ParallelCucumber::CustomLogger::DEBUG : ParallelCucumber::CustomLogger::INFO
+
       results = {}
       begin
-        @logger = ParallelCucumber::CustomLogger.new(MultiDelegator.delegate(:write, :close).to(STDOUT, shut_logger))
-        @logger.progname = "Worker-#{@index}"
-        @logger.level = @debug ? ParallelCucumber::CustomLogger::DEBUG : ParallelCucumber::CustomLogger::INFO
-
-        @logger.info("Starting, also logging to #{@log_file}")
+        @logger.info("Logging to #{@log_file}")
 
         unless @worker_delay.zero?
           @logger.info("Waiting #{@worker_delay * @index} seconds before start")
@@ -78,7 +85,7 @@ module ParallelCucumber
         @logger.debug(<<-LOG)
         Additional environment variables: #{env.map { |k, v| "#{k}=#{v}" }.join(' ')}
         LOG
-        @logger.update(@stdout_logger)
+        @logger.update_into(@stdout_logger)
 
         # TODO: Replace running total with queues for passed, failed, unknown, skipped.
         running_total = Hash.new(0)
@@ -106,7 +113,7 @@ module ParallelCucumber
             end
           end
           @logger.debug("Loop took #{loop_mm} minutes #{loop_ss} seconds")
-          @logger.update(@stdout_logger)
+          @logger.update_into(@stdout_logger)
         rescue => e
           trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
           @logger.error("Threw: #{e.inspect} #{trace}")
@@ -114,6 +121,8 @@ module ParallelCucumber
           results[":worker-#{@index}"] = running_total
           teardown(env)
         end
+      ensure
+        @logger.update_into(@stdout_logger)
       end
       results
     end
@@ -133,7 +142,7 @@ module ParallelCucumber
       end
     ensure
       @logger.debug("Batch #{batch_id} took #{batch_mm} minutes #{batch_ss} seconds")
-      @logger.update(@stdout_logger)
+      @logger.update_into(@stdout_logger)
     end
 
     def precheck(env)
@@ -206,7 +215,7 @@ module ParallelCucumber
         end
       end
     ensure
-      @logger.update(@stdout_logger)
+      @logger.update_into(@stdout_logger)
       FileUtils.rm_rf(test_batch_dir)
     end
 
@@ -221,7 +230,7 @@ module ParallelCucumber
       end
     ensure
       @logger.debug("Teardown took #{mm} minutes #{ss} seconds")
-      @logger.update(@stdout_logger)
+      @logger.update_into(@stdout_logger)
     end
 
     def setup(env)
@@ -238,7 +247,7 @@ module ParallelCucumber
       end
     ensure
       @logger.debug("Setup took #{mm} minutes #{ss} seconds")
-      @logger.update(@stdout_logger)
+      @logger.update_into(@stdout_logger)
     end
 
     def parse_results(f)
