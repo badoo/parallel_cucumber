@@ -186,7 +186,7 @@ module ParallelCucumber
       end
 
       option_parser.parse!(argv)
-      options[:cucumber_args] = argv
+      options[:cucumber_args] = argv.join(' ')
 
       options
     rescue OptionParser::InvalidOption => e

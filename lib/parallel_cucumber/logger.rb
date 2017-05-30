@@ -13,7 +13,7 @@ module ParallelCucumber
       mutex.synchronize { yield self }
     end
 
-    def update(other_logger)
+    def update_into(other_logger)
       # TODO: This should write the #teamcity block wrapper: update(other_logger, 'qa-w12> precheck') etc.
       @logdev.dev.fsync # Helpful, but inadequate: a child process might still have buffered stuff.
       other_logger.synch do |l|

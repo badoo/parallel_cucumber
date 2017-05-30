@@ -10,6 +10,7 @@ module ParallelCucumber
     module Cucumber
       class << self
         def selected_tests(options, args_string)
+          puts "selected_tests (#{options.inspect} #{args_string.inspect})"
           dry_run_report = dry_run_report(options, args_string)
           parse_json_report(dry_run_report).keys
         end
