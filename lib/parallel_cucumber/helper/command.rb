@@ -40,16 +40,20 @@ module ParallelCucumber
                "...output #{pstat.value} ends\n"].join("\n")
             end
             logger << completed
-            # system("lsof #{log_file} >> #{log_file} 2>&1")
-            # system("ps -axf | grep '#{pstat[:pid]}\\s' >> #{log_file}")
             return pstat.value.success?
           rescue Timeout::Error
+            tree = Helper::Processes.ps_tree
+            unless Helper::Processes.ms_windows?
+              logger.debug("Timeout, so trying SIGUSR1 to trigger watchdog stacktrace #{pstat[:pid]}")
+              Helper::Processes.kill_tree('SIGUSR1', pid, tree)
+              logger << %x(ps -ax)
+              sleep 2
+            end
             pout.close
             logger.debug("Timeout, so trying SIGINT #{pstat[:pid]}")
             wait_sigint = 15
             output = out ? "\nBut output so far: ≤#{out}≥\n" : 'but no output so far'
             logger.error("Timeout #{timeout}s was reached. Sending SIGINT(2), SIGKILL after #{wait_sigint}s.#{output}")
-            tree = Helper::Processes.ps_tree
             begin
               pid = pstat[:pid].to_s
               Helper::Processes.kill_tree('SIGINT', pid, tree)
