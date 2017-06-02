@@ -22,17 +22,17 @@ module ParallelCucumber
           message = <<-LOG
         Running command `#{full_script}` with environment variables: #{env_string}
           LOG
-          logger.debug(message)
+          logger << message
           pstat = nil
           pout = nil
           out = nil
           begin
             completed = Timeout.timeout(timeout) do
               pin, pout, pstat = Open3.popen2e(env, full_script)
-              logger.debug("Command has pid #{pstat[:pid]}")
+              logger << "Command has pid #{pstat[:pid]}"
               pin.close
               out = []
-              pout.each_line { |l| out << l } # incremental version of out = pout.readlines.join
+              pout.each_line { |l| logger << l } # incremental version of out = pout.readlines.join
               pout.close
               pstat.value # reap already-terminated child.
               ["Command completed #{pstat.value}; output was (lines=#{out.count}):",
@@ -43,33 +43,39 @@ module ParallelCucumber
             return pstat.value.success?
           rescue Timeout::Error
             tree = Helper::Processes.ps_tree
+            pid = pstat[:pid].to_s
             unless Helper::Processes.ms_windows?
-              logger.debug("Timeout, so trying SIGUSR1 to trigger watchdog stacktrace #{pstat[:pid]}")
-              Helper::Processes.kill_tree('SIGUSR1', pid, tree)
+              logger << "Timeout, so trying SIGUSR1 to trigger watchdog stacktrace #{pstat[:pid]}=#{full_script}"
+              Helper::Processes.kill_tree('SIGUSR1', pid, logger, tree)
               logger << %x(ps -ax)
               sleep 2
             end
+
+            logger << "Timeout, so trying SIGINT at #{pstat[:pid]}=#{full_script}"
+
+            Timeout.timeout(2) do
+              pout.each_line { |l| logger << l } # incremental version of out = pout.readlines.join
+            end
             pout.close
-            logger.debug("Timeout, so trying SIGINT #{pstat[:pid]}")
+
             wait_sigint = 15
             output = out ? "\nBut output so far: ≤#{out}≥\n" : 'but no output so far'
-            logger.error("Timeout #{timeout}s was reached. Sending SIGINT(2), SIGKILL after #{wait_sigint}s.#{output}")
+            logger << "Timeout #{timeout}s was reached. Sending SIGINT(2), SIGKILL after #{wait_sigint}s.#{output}"
             begin
-              pid = pstat[:pid].to_s
-              Helper::Processes.kill_tree('SIGINT', pid, tree)
+              Helper::Processes.kill_tree('SIGINT', pid, logger, tree)
               timed_out = wait_sigint.times do |t|
-                break if Helper::Processes.all_pids_dead?(pid, nil, tree)
-                logger.error("Wait dead #{t} pid #{pid}")
+                break if Helper::Processes.all_pids_dead?(pid, logger, nil, tree)
+                logger << "Wait dead #{t} pid #{pid}"
                 sleep 1
               end
               if timed_out
-                logger.error("Process #{pid} lasted #{wait_sigint}s after SIGINT(2), so SIGKILL(9)! Fatality!")
-                Helper::Processes.kill_tree('SIGKILL', pid, nil, tree)
+                logger << "Process #{pid} lasted #{wait_sigint}s after SIGINT(2), so SIGKILL(9)! Fatality!"
+                Helper::Processes.kill_tree('SIGKILL', pid, logger, nil, tree)
+                logger << "Tried SIGKILL #{pid}!"
               end
-              logger.debug("About to reap root #{pid}")
+              logger << "About to reap root #{pid}"
               pstat.value # reap root - everything else should be reaped by init.
-              logger.debug("Reaped root #{pid}")
-              logger.debug("Tried SIGKILL #{pid}!")
+              logger << "Reaped root #{pid}"
             end
           rescue => e
             logger.debug("Exception #{pstat ? pstat[:pid] : "pstat=#{pstat}=nil"}")
@@ -79,7 +85,7 @@ module ParallelCucumber
           ensure
             logger << format(log_decoration['end'] + "\n", block_name) if log_decoration['end']
           end
-          logger.debug("Unusual termination for command: #{script}")
+          logger.error("*** UNUSUAL TERMINATION FOR: #{script}")
           nil
         end
       end
