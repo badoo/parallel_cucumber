@@ -9,7 +9,9 @@ module ParallelCucumber
           logger << format(log_decoration['end'] + "\n", block_name) if log_decoration['end']
         end
 
-        def exec_command(env, desc, script, _log_file, logger, log_decoration = {}, timeout = 30) # rubocop:disable Metrics/ParameterLists, Metrics/LineLength
+        ONE_SECOND = 1
+
+        def exec_command(env, desc, script, logger, log_decoration = {}, timeout = 30) # rubocop:disable Metrics/ParameterLists, Metrics/LineLength
           block_name = ''
           if log_decoration['worker_block']
             if log_decoration['start'] || log_decoration['end']
@@ -19,25 +21,41 @@ module ParallelCucumber
           logger << format(log_decoration['start'] + "\n", block_name) if log_decoration['start']
           full_script = "#{script} 2>&1"
           env_string = env.map { |k, v| "#{k}=#{v}" }.sort.join(' ')
-          message = <<-LOG
-        Running command `#{full_script}` with environment variables: #{env_string}
-          LOG
-          logger << message
+          logger << "== Running command `#{full_script}`\n== with environment variables: #{env_string}\n"
           pstat = nil
           pout = nil
-          out = nil
+          out_string = ''
           begin
             completed = Timeout.timeout(timeout) do
               pin, pout, pstat = Open3.popen2e(env, full_script)
-              logger << "Command has pid #{pstat[:pid]}"
+              logger << "Command has pid #{pstat[:pid]}\n"
               pin.close
-              out = []
-              pout.each_line { |l| logger << l } # incremental version of out = pout.readlines.join
+              out_reader = Thread.new do
+                begin
+                  loop do
+                    out_string += (pout.read_nonblock(8192) || '')
+                    out_string = log_until_incomplete_line(logger, out_string)
+                    sleep ONE_SECOND
+                  end
+                rescue IO::WaitReadable
+                  # Read until it's empty AND the process is dead.
+                  io_select = IO.select([pout], [], [], ONE_SECOND)
+                  retry if io_select || pstat.alive?
+                  logger << "\n\n== Leaving because io_select=#{io_select} when pstat.alive?=#{pstat.alive?}"
+                rescue EOFError
+                  nil # We're happy
+                rescue => e
+                  logger << "\n\n== Exception in out_reader due to #{e.inspect} #{e.backtrace}\n\n"
+                ensure
+                  logger << out_string
+                  logger << "\n"
+                  logger << "\n\n== Terminating out_reader with subprocess in status=#{pstat.status}\n"
+                end
+              end
+              out_reader.value # Should terminate with pstat
               pout.close
               pstat.value # reap already-terminated child.
-              ["Command completed #{pstat.value}; output was (lines=#{out.count}):",
-               out.join,
-               "...output #{pstat.value} ends\n"].join("\n")
+              "Command completed #{pstat.value}"
             end
             logger << completed
             return pstat.value.success?
@@ -54,13 +72,12 @@ module ParallelCucumber
             logger << "Timeout, so trying SIGINT at #{pstat[:pid]}=#{full_script}"
 
             Timeout.timeout(2) do
-              pout.each_line { |l| logger << l } # incremental version of out = pout.readlines.join
+              pout.each_line { |l| logger << l }
             end
             pout.close
 
             wait_sigint = 15
-            output = out ? "\nBut output so far: ≤#{out}≥\n" : 'but no output so far'
-            logger << "Timeout #{timeout}s was reached. Sending SIGINT(2), SIGKILL after #{wait_sigint}s.#{output}"
+            logger << "Timeout #{timeout}s was reached. Sending SIGINT(2), SIGKILL after #{wait_sigint}s."
             begin
               Helper::Processes.kill_tree('SIGINT', pid, logger, tree)
               timed_out = wait_sigint.times do |t|
@@ -80,13 +97,21 @@ module ParallelCucumber
           rescue => e
             logger.debug("Exception #{pstat ? pstat[:pid] : "pstat=#{pstat}=nil"}")
             trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
-            output = out ? "\nOutput: ≤#{out}≥\n" : 'but no output caught'
-            logger.error("Threw for #{full_script}, caused #{trace}#{output}")
+            logger.error("Threw for #{full_script}, caused #{trace}")
           ensure
             logger << format(log_decoration['end'] + "\n", block_name) if log_decoration['end']
           end
           logger.error("*** UNUSUAL TERMINATION FOR: #{script}")
           nil
+        end
+
+        def log_until_incomplete_line(logger, out_string)
+          loop do
+            line, out_string = out_string.split(/\n/, 2)
+            return line || '' unless out_string
+            logger << line
+            logger << "\n"
+          end
         end
       end
     end

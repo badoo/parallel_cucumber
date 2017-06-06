@@ -148,7 +148,7 @@ module ParallelCucumber
     def precheck(env)
       return unless @pre_check
       continue = Helper::Command.exec_command(
-        env, 'precheck', @pre_check, @log_file, @logger, @log_decoration, @batch_timeout
+        env, 'precheck', @pre_check, @logger, @log_decoration, @batch_timeout
       )
       return if continue
       @logger.error('Pre-check failed: quitting immediately')
@@ -198,7 +198,7 @@ module ParallelCucumber
       file_map.each { |_user, worker| FileUtils.mkpath(worker) if worker =~ %r{\/$} }
       mapped_batch_cmd += ' ' + tests.join(' ')
       res = ParallelCucumber::Helper::Command.exec_command(
-        batch_env, 'batch', mapped_batch_cmd, @log_file, @logger, @log_decoration, @batch_timeout
+        batch_env, 'batch', mapped_batch_cmd, @logger, @log_decoration, @batch_timeout
       )
       if res.nil?
         {}
@@ -224,7 +224,7 @@ module ParallelCucumber
       mm, ss = time_it do
         @logger.info('Teardown running')
         success = Helper::Command.exec_command(
-          env, 'teardown', @teardown_worker, @log_file, @logger, @log_decoration
+          env, 'teardown', @teardown_worker, @logger, @log_decoration
         )
         @logger.warn('Teardown finished with error') unless success
       end
@@ -238,7 +238,7 @@ module ParallelCucumber
       mm, ss = time_it do
         @logger.info('Setup running')
         success = Helper::Command.exec_command(
-          env, 'setup', @setup_worker, @log_file, @logger, @log_decoration, @setup_timeout
+          env, 'setup', @setup_worker, @logger, @log_decoration, @setup_timeout
         )
         unless success
           @logger.warn("Setup failed: #{@index} quitting immediately")
