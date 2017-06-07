@@ -33,23 +33,22 @@ module ParallelCucumber
               out_reader = Thread.new do
                 begin
                   loop do
-                    out_string += (pout.read_nonblock(8192) || '')
-                    out_string = log_until_incomplete_line(logger, out_string)
-                    sleep ONE_SECOND
+                    io_select = IO.select([pout], [], [], ONE_SECOND)
+                    unless io_select || pstat.alive?
+                      logger << "\n== Terminating because io_select=#{io_select} when pstat.alive?=#{pstat.alive?}\n"
+                      break
+                    end
+                    next unless io_select
+                    # Windows doesn't support read_nonblock!
+                    out_string = log_until_incomplete_line(logger, out_string + pout.readpartial(8192))
                   end
-                rescue IO::WaitReadable
-                  # Read until it's empty AND the process is dead.
-                  io_select = IO.select([pout], [], [], ONE_SECOND)
-                  retry if io_select || pstat.alive?
-                  logger << "\n\n== Leaving because io_select=#{io_select} when pstat.alive?=#{pstat.alive?}"
                 rescue EOFError
-                  nil # We're happy
+                  nil # This is actually our expected happy case: everything else is weird.
                 rescue => e
-                  logger << "\n\n== Exception in out_reader due to #{e.inspect} #{e.backtrace}\n\n"
+                  logger << "\n== Exception in out_reader due to #{e.inspect} #{e.backtrace}\n"
                 ensure
                   logger << out_string
-                  logger << "\n"
-                  logger << "\n\n== Terminating out_reader with subprocess in status=#{pstat.status}\n"
+                  logger << "\n== Leaving out_reader with subprocess in status=#{pstat.status}\n"
                 end
               end
               out_reader.value # Should terminate with pstat
