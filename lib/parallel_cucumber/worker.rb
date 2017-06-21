@@ -1,5 +1,6 @@
 require 'English'
 require 'timeout'
+require 'tmpdir' # I loathe Ruby.
 
 module ParallelCucumber
   class Tracker
@@ -22,14 +23,14 @@ module ParallelCucumber
   class Worker
     include ParallelCucumber::Helper::Utils
 
-    def initialize(options, index)
+    def initialize(options, index, stdout_logger)
       @batch_size = options[:batch_size]
+      @group_by = options[:group_by]
       @batch_timeout = options[:batch_timeout]
       @setup_timeout = options[:setup_timeout]
       @cucumber_options = options[:cucumber_options]
       @test_command = options[:test_command]
       @pre_check = options[:pre_check]
-      @env_variables = options[:env_variables]
       @index = index
       @queue_connection_params = options[:queue_connection_params]
       @setup_worker = options[:setup_worker]
@@ -39,9 +40,10 @@ module ParallelCucumber
       @log_decoration = options[:log_decoration]
       @log_dir = options[:log_dir]
       @log_file = "#{@log_dir}/worker_#{index}.log"
+      @stdout_logger = stdout_logger # .sync writes only.
     end
 
-    def shut_logger
+    def autoshutting_file
       file_handle = { log_file: @log_file }
 
       def file_handle.write(message)
@@ -53,6 +55,13 @@ module ParallelCucumber
       def file_handle.close
       end
 
+      def file_handle.fsync
+      end
+
+      def file_handle.path
+        self[:log_file]
+      end
+
       file_handle
     end
 
@@ -61,13 +70,13 @@ module ParallelCucumber
 
       File.delete(@log_file) if File.exist?(@log_file)
 
+      @logger = ParallelCucumber::CustomLogger.new(autoshutting_file)
+      @logger.progname = "Worker-#{@index}"
+      @logger.level = @debug ? ParallelCucumber::CustomLogger::DEBUG : ParallelCucumber::CustomLogger::INFO
+
       results = {}
       begin
-        @logger = ParallelCucumber::CustomLogger.new(MultiDelegator.delegate(:write, :close).to(STDOUT, shut_logger))
-        @logger.progname = "Worker-#{@index}"
-        @logger.level = @debug ? ParallelCucumber::CustomLogger::DEBUG : ParallelCucumber::CustomLogger::INFO
-
-        @logger.info("Starting, also logging to #{@log_file}")
+        @logger.info("Logging to #{@log_file}")
 
         unless @worker_delay.zero?
           @logger.info("Waiting #{@worker_delay * @index} seconds before start")
@@ -77,22 +86,27 @@ module ParallelCucumber
         @logger.debug(<<-LOG)
         Additional environment variables: #{env.map { |k, v| "#{k}=#{v}" }.join(' ')}
         LOG
+        @logger.update_into(@stdout_logger)
 
-        running_total = Hash.new(0)
+        # TODO: Replace running total with queues for passed, failed, unknown, skipped.
+        running_total = Hash.new(0) # Default new keys to 0
+        puts "GROUP BY .... #{env[@group_by]}" if @group_by
+        running_total[:group] = env[@group_by] if @group_by
         begin
           setup(env)
 
           queue = ParallelCucumber::Helper::Queue.new(@queue_connection_params)
+          directed_queue = ParallelCucumber::Helper::Queue.new(@queue_connection_params, "_#{@index}")
           queue_tracker = Tracker.new(queue)
 
           loop_mm, loop_ss = time_it do
             loop do
-              break if queue.empty?
+              break if queue.empty? && directed_queue.empty?
               batch = []
               precheck(env)
               @batch_size.times do
-                # TODO: Handle recovery of dequeued tests, if a worker dies mid-processing.
-                batch << queue.dequeue
+                # TODO: Handle recovery of possibly toxic dequeued undirected tests if a worker dies mid-processing.
+                batch << (directed_queue.empty? ? queue : directed_queue).dequeue
               end
               batch.compact!
               batch.sort! # Workaround for https://github.com/cucumber/cucumber-ruby/issues/952
@@ -102,10 +116,16 @@ module ParallelCucumber
             end
           end
           @logger.debug("Loop took #{loop_mm} minutes #{loop_ss} seconds")
+          @logger.update_into(@stdout_logger)
+        rescue => e
+          trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
+          @logger.error("Threw: #{e.inspect} #{trace}")
         ensure
           results[":worker-#{@index}"] = running_total
           teardown(env)
         end
+      ensure
+        @logger.update_into(@stdout_logger)
       end
       results
     end
@@ -123,18 +143,19 @@ module ParallelCucumber
         running_totals(batch_results, running_total)
         results.merge!(batch_results)
       end
-
+    ensure
       @logger.debug("Batch #{batch_id} took #{batch_mm} minutes #{batch_ss} seconds")
+      @logger.update_into(@stdout_logger)
     end
 
     def precheck(env)
       return unless @pre_check
       continue = Helper::Command.exec_command(
-        env, 'precheck', @pre_check, @log_file, @logger, @log_decoration, @batch_timeout
+        env, 'precheck', @pre_check, @logger, @log_decoration, @batch_timeout
       )
       return if continue
       @logger.error('Pre-check failed: quitting immediately')
-      raise :prechek_failed
+      raise 'Pre-check failed: quitting immediately'
     end
 
     def running_totals(batch_results, running_total)
@@ -165,7 +186,9 @@ module ParallelCucumber
     end
 
     def test_batch(batch_id, env, running_total, tests)
-      test_batch_dir = "#{Dir.tmpdir}/w-#{batch_id}"
+      # Prefer /tmp to Mac's brain-dead /var/folders/y8/8kqjszcs2slchjx2z5lrw2t80000gp/T/w-1497514590-0 nonsense
+      prefer_tmp = ENV.fetch('PREFER_TMP', Dir.tmpdir)
+      test_batch_dir = "#{Dir.exist?(prefer_tmp) ? prefer_tmp : Dir.tmpdir}/w-#{batch_id}"
       FileUtils.rm_rf(test_batch_dir)
       FileUtils.mkpath(test_batch_dir)
 
@@ -180,7 +203,7 @@ module ParallelCucumber
       file_map.each { |_user, worker| FileUtils.mkpath(worker) if worker =~ %r{\/$} }
       mapped_batch_cmd += ' ' + tests.join(' ')
       res = ParallelCucumber::Helper::Command.exec_command(
-        batch_env, 'batch', mapped_batch_cmd, @log_file, @logger, @log_decoration, @batch_timeout
+        batch_env, 'batch', mapped_batch_cmd, @logger, @log_decoration, @batch_timeout
       )
       if res.nil?
         {}
@@ -197,6 +220,7 @@ module ParallelCucumber
         end
       end
     ensure
+      @logger.update_into(@stdout_logger)
       FileUtils.rm_rf(test_batch_dir)
     end
 
@@ -205,11 +229,13 @@ module ParallelCucumber
       mm, ss = time_it do
         @logger.info('Teardown running')
         success = Helper::Command.exec_command(
-          env, 'teardown', @teardown_worker, @log_file, @logger, @log_decoration
+          env, 'teardown', @teardown_worker, @logger, @log_decoration
         )
         @logger.warn('Teardown finished with error') unless success
       end
+    ensure
       @logger.debug("Teardown took #{mm} minutes #{ss} seconds")
+      @logger.update_into(@stdout_logger)
     end
 
     def setup(env)
@@ -217,14 +243,16 @@ module ParallelCucumber
       mm, ss = time_it do
         @logger.info('Setup running')
         success = Helper::Command.exec_command(
-          env, 'setup', @setup_worker, @log_file, @logger, @log_decoration, @setup_timeout
+          env, 'setup', @setup_worker, @logger, @log_decoration, @setup_timeout
         )
         unless success
-          @logger.warn('Setup failed: quitting immediately')
-          raise :setup_failed
+          @logger.warn("Setup failed: #{@index} quitting immediately")
+          raise 'Setup failed: quitting immediately'
         end
       end
+    ensure
       @logger.debug("Setup took #{mm} minutes #{ss} seconds")
+      @logger.update_into(@stdout_logger)
     end
 
     def parse_results(f)
