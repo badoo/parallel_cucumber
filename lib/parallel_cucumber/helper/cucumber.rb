@@ -9,8 +9,9 @@ module ParallelCucumber
   module Helper
     module Cucumber
       class << self
-        def selected_tests(options, arguments)
-          dry_run_report = dry_run_report(options, arguments)
+        def selected_tests(options, args_string)
+          puts "selected_tests (#{options.inspect} #{args_string.inspect})"
+          dry_run_report = dry_run_report(options, args_string)
           parse_json_report(dry_run_report).keys
         end
 
@@ -53,7 +54,7 @@ module ParallelCucumber
 
         private
 
-        def dry_run_report(options, args)
+        def dry_run_report(options, args_string)
           options = options.dup
           options = expand_profiles(options) unless config_file.nil?
           options = remove_formatters(options)
@@ -62,7 +63,7 @@ module ParallelCucumber
           Tempfile.open(%w(dry-run .json)) do |f|
             dry_run_options = "--dry-run --format json --out #{f.path}"
 
-            cmd = "cucumber #{options} #{dry_run_options} #{args}"
+            cmd = "cucumber #{options} #{dry_run_options} #{args_string}"
             _stdout, stderr, status = Open3.capture3(cmd)
             f.close
 
