@@ -10,6 +10,7 @@ module ParallelCucumber
       setup_timeout: 30,
       cucumber_options: '',
       debug: false,
+      directed_tests: {},
       log_dir: '.',
       log_decoration: {},
       env_variables: {},
@@ -60,6 +61,15 @@ module ParallelCucumber
 
         opts.on('-o', '--cucumber-options "OPTIONS"', 'Run cucumber with these options') do |cucumber_options|
           options[:cucumber_options] = cucumber_options
+        end
+
+        opts.on('--directed-tests JSON', 'Direct tests to specific workers, e.g. {"0": "-t @head"}') do |json|
+          options[:directed_tests] = begin
+            JSON.parse(json)
+          rescue JSON::ParserError
+            puts 'Log block quoting not in JSON format. Did you forget to escape the quotes?'
+            raise
+          end
         end
 
         opts.on('--test-command COMMAND',
@@ -148,10 +158,10 @@ module ParallelCucumber
           options[:batch_timeout] = batch_timeout
         end
 
-        help_message = <<-TEXT
+        help_message = <<-TEXT.gsub(/\s+/, ' ').strip
           Timeout for each worker's set-up phase. Default is #{DEFAULTS[:setup_timeout]}
         TEXT
-        opts.on('--setup-timeout SECONDS', Float, help_message.gsub(/\s+/, ' ').strip) do |setup_timeout|
+        opts.on('--setup-timeout SECONDS', Float, help_message) do |setup_timeout|
           options[:setup_timeout] = setup_timeout
         end
 
@@ -160,8 +170,8 @@ module ParallelCucumber
         end
 
         help_message = 'Cucumber arguments for long-running-tests'
-        opts.on('--long-running-tests STRING', String, help_message) do |cucumber_args|
-          options[:long_running_tests] = cucumber_args
+        opts.on('--long-running-tests STRING', String, help_message) do |cucumber_long_run_args|
+          options[:long_running_tests] = cucumber_long_run_args
         end
 
         opts.on('-v', '--version', 'Show version') do
@@ -176,7 +186,7 @@ module ParallelCucumber
       end
 
       option_parser.parse!(argv)
-      options[:cucumber_args] = argv
+      options[:cucumber_args] = argv.join(' ')
 
       options
     rescue OptionParser::InvalidOption => e

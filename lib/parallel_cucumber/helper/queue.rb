@@ -5,7 +5,7 @@ module ParallelCucumber
     class Queue
       attr_reader :name
 
-      def initialize(queue_connection_params)
+      def initialize(queue_connection_params, append = '')
         # queue_connection_params:
         #   `url--[name]`
         # url:
@@ -15,11 +15,11 @@ module ParallelCucumber
         #   queue name, default is `queue`
         url, name = queue_connection_params
         @redis = Redis.new(url: url)
-        @name = name
+        @name = name + append
       end
 
       def enqueue(elements)
-        @redis.lpush(@name, elements)
+        @redis.lpush(@name, elements) unless elements.empty?
       end
 
       def dequeue
