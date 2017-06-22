@@ -3,10 +3,14 @@ module ParallelCucumber
     module Command
       class << self
         def wrap_block(log_decoration, block_name, logger)
+          [$stdout, $stderr].each(&:flush)
           logger << format(log_decoration['start'] + "\n", block_name) if log_decoration['start']
+          [$stdout, $stderr].each(&:flush)
           yield
         ensure
+          [$stdout, $stderr].each(&:flush)
           logger << format(log_decoration['end'] + "\n", block_name) if log_decoration['end']
+          [$stdout, $stderr].each(&:flush)
         end
 
         ONE_SECOND = 1
@@ -43,20 +47,29 @@ module ParallelCucumber
                     out_string = log_until_incomplete_line(logger, out_string + pout.readpartial(8192))
                   end
                 rescue EOFError
-                  nil # This is actually our expected happy case: everything else is weird.
+                  logger << "\n== EOF: expected exit, #{pstat.inspect}\n"
                 rescue => e
                   logger << "\n== Exception in out_reader due to #{e.inspect} #{e.backtrace}\n"
                 ensure
                   logger << out_string
-                  logger << "\n== Leaving out_reader with subprocess in status=#{pstat.status}\n"
+                  logger << "\n== Left out_reader; pipe=#{pstat.status}+#{pstat.status ? '≤no value≥' : pstat.value}\n"
                 end
               end
               out_reader.value # Should terminate with pstat
               pout.close
+              if pstat.status
+                logger << "== Thread #{pstat.inspect} is not dead"
+                if pstat.join(3)
+                  logger << "== Thread #{pstat.inspect} joined late"
+                else
+                  pstat.terminate # Just in case
+                  logger << "== Thread #{pstat.inspect} terminated"
+                end # Make an effort to reap
+              end
               pstat.value # reap already-terminated child.
               "Command completed #{pstat.value}"
             end
-            logger << completed
+            logger << "#{completed}\n"
             return pstat.value.success?
           rescue Timeout::Error
             tree = Helper::Processes.ps_tree
