@@ -90,7 +90,6 @@ module ParallelCucumber
 
         # TODO: Replace running total with queues for passed, failed, unknown, skipped.
         running_total = Hash.new(0) # Default new keys to 0
-        puts "GROUP BY .... #{env[@group_by]}" if @group_by
         running_total[:group] = env[@group_by] if @group_by
         begin
           setup(env)
