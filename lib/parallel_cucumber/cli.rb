@@ -123,6 +123,10 @@ module ParallelCucumber
           options[:batch_size] = batch_size
         end
 
+        opts.on('--group-by ENV_VAR', 'Key for cumulative report') do |group_by|
+          options[:group_by] = group_by
+        end
+
         help_message = <<-TEXT.gsub(/\s+/, ' ').strip
          `url,name`
           Url for TCP connection:

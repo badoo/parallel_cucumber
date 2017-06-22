@@ -58,6 +58,84 @@ module ParallelCucumber
       @logger.info("Adding #{tests.count} tests to Queue")
       queue.enqueue(tests) unless tests.empty?
 
+      number_of_workers = determine_work_and_batch_size(count)
+
+      diff = []
+      status_totals = {}
+      total_mm, total_ss = time_it do
+        results = run_parallel_workers(number_of_workers) || {}
+        unrun = tests - results.keys
+        @logger.error("Tests #{unrun.join(' ')} were not run") unless diff.empty?
+        @logger.error("Queue #{queue.name} is not empty") unless queue.empty?
+
+        status_totals = Status.constants.map do |status|
+          status = Status.const_get(status)
+          tests_with_status = results.select { |_t, s| s == status }.keys
+          [status, tests_with_status]
+        end.to_h
+
+        Helper::Command.wrap_block(@options[:log_decoration], 'Worker summary', @logger) do
+          results.find_all { |w| w.first =~ /^:worker-/ }.each { |w| @logger.info("#{w.first} #{w.last.sort}") }
+        end
+
+        report_by_group(results)
+      end
+
+      @logger.debug("SUMMARY=#{@options[:summary]}") if @options[:summary]
+      status_totals.each do |s, tt|
+        next if tt.empty?
+        @logger.info("Total: #{s.to_s.upcase} tests (#{tt.count}): #{tt.join(' ')}")
+        filename = @options[:summary] && @options[:summary][s.to_s.downcase]
+        open(filename, 'w') { |f| f << tt.join("\n") } if filename
+      end
+
+      @logger.info("\nTook #{total_mm} minutes #{total_ss} seconds")
+
+      exit((diff + status_totals[Status::FAILED] + status_totals[Status::UNKNOWN]).empty? ? 0 : 1)
+    end
+
+    def report_by_group(results)
+      group = Hash.new { |h, k| h[k] = Hash.new(0) } # Default new keys to 0
+
+      Helper::Command.wrap_block(@options[:log_decoration], 'Worker summary', @logger) do
+        results.find_all { |w| w.first =~ /^:worker-/ }.each do |w|
+          # w = [:worker-0, [[:batches, 7], [:group, "localhost2"], [:skipped, 7]]]
+          gp = w.last[:group]
+          next unless gp
+          w.last.each { |(k, v)| group[gp][k] += w.last[k] if v && k != :group }
+          group[gp][:group] = {} unless group[gp].key?(:group)
+          group[gp][:group][w.first] = 1
+        end
+      end
+
+      @logger.info "== Groups key count #{group.keys.count}"
+
+      return unless group.keys.count > 1
+
+      Helper::Command.wrap_block(@options[:log_decoration], 'Group summary', @logger) do
+        group.each { |(k, v)| @logger.info("#{k} #{v.sort}") }
+      end
+    end
+
+    def run_parallel_workers(number_of_workers)
+      Helper::Command.wrap_block(@options[:log_decoration],
+                                 @options[:log_decoration]['worker_block'] || 'workers',
+                                 @logger) do
+        remaining = (0...number_of_workers - 1).to_a
+        map = Parallel.map(
+          remaining.dup,
+          in_threads: number_of_workers,
+          finish: -> (_, ix, _) { @logger.synch { |l| l.info("Finished: #{ix} remaining: #{remaining -= [ix]}") } }
+        ) do |index|
+          ParallelCucumber::Worker
+            .new(@options, index, @logger)
+            .start(env_for_worker(@options[:env_variables], index))
+        end
+        map.inject(:merge) # Returns hash of file:line to statuses + :worker-index to summary.
+      end
+    end
+
+    def determine_work_and_batch_size(count)
       if @options[:n] == 0
         @options[:n] = [1, @options[:env_variables].map { |_k, v| v.is_a?(Array) ? v.count : 0 }].flatten.max
         @logger.info("Inferred worker count #{@options[:n]} from env_variables option")
@@ -84,55 +162,7 @@ module ParallelCucumber
           than #{original_batch_size}
         LOG
       end
-
-      diff = []
-      info = {}
-      total_mm, total_ss = time_it do
-        results = Helper::Command.wrap_block(@options[:log_decoration],
-                                             @options[:log_decoration]['worker_block'] || 'workers',
-                                             @logger) do
-          finished = []
-          map = Parallel.map(
-            0...number_of_workers,
-            in_threads: number_of_workers,
-            finish: -> (_, ix, _) { @logger.synch { |l| l.info("Finished: #{finished[ix] = ix} #{finished - [nil]}") } }
-          ) do |index|
-            ParallelCucumber::Worker
-              .new(@options, index, @logger)
-              .start(env_for_worker(@options[:env_variables], index))
-          end
-          puts map
-          map.inject(:merge) # Returns hash of file:line to statuses + :worker-index to summary.
-        end
-        results ||= {}
-        unrun = tests - results.keys
-        @logger.error("Tests #{unrun.join(' ')} were not run") unless diff.empty?
-        @logger.error("Queue #{queue.name} is not empty") unless queue.empty?
-
-        Helper::Command.wrap_block(
-          @options[:log_decoration],
-          'Worker summary',
-          @logger
-        ) { results.find_all { |w| @logger.info("#{w.first} #{w.last.sort}") if w.first =~ /^:worker-/ } }
-
-        info = Status.constants.map do |status|
-          status = Status.const_get(status)
-          tests_with_status = results.select { |_t, s| s == status }.keys
-          [status, tests_with_status]
-        end.to_h
-      end
-
-      @logger.debug("SUMMARY=#{@options[:summary]}") if @options[:summary]
-      info.each do |s, tt|
-        next if tt.empty?
-        @logger.info("Total: #{s.to_s.upcase} tests (#{tt.count}): #{tt.join(' ')}")
-        filename = @options[:summary] && @options[:summary][s.to_s.downcase]
-        open(filename, 'w') { |f| f << tt.join("\n") } if filename
-      end
-
-      @logger.info("\nTook #{total_mm} minutes #{total_ss} seconds")
-
-      exit((diff + info[Status::FAILED] + info[Status::UNKNOWN]).empty? ? 0 : 1)
+      number_of_workers
     end
 
     private

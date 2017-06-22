@@ -1,5 +1,6 @@
 require 'English'
 require 'timeout'
+require 'tmpdir' # I loathe Ruby.
 
 module ParallelCucumber
   class Tracker
@@ -24,12 +25,12 @@ module ParallelCucumber
 
     def initialize(options, index, stdout_logger)
       @batch_size = options[:batch_size]
+      @group_by = options[:group_by]
       @batch_timeout = options[:batch_timeout]
       @setup_timeout = options[:setup_timeout]
       @cucumber_options = options[:cucumber_options]
       @test_command = options[:test_command]
       @pre_check = options[:pre_check]
-      @env_variables = options[:env_variables]
       @index = index
       @queue_connection_params = options[:queue_connection_params]
       @setup_worker = options[:setup_worker]
@@ -88,7 +89,8 @@ module ParallelCucumber
         @logger.update_into(@stdout_logger)
 
         # TODO: Replace running total with queues for passed, failed, unknown, skipped.
-        running_total = Hash.new(0)
+        running_total = Hash.new(0) # Default new keys to 0
+        running_total[:group] = env[@group_by] if @group_by
         begin
           setup(env)
 
@@ -183,7 +185,9 @@ module ParallelCucumber
     end
 
     def test_batch(batch_id, env, running_total, tests)
-      test_batch_dir = "#{Dir.tmpdir}/w-#{batch_id}"
+      # Prefer /tmp to Mac's brain-dead /var/folders/y8/8kqjszcs2slchjx2z5lrw2t80000gp/T/w-1497514590-0 nonsense
+      prefer_tmp = ENV.fetch('PREFER_TMP', Dir.tmpdir)
+      test_batch_dir = "#{Dir.exist?(prefer_tmp) ? prefer_tmp : Dir.tmpdir}/w-#{batch_id}"
       FileUtils.rm_rf(test_batch_dir)
       FileUtils.mkpath(test_batch_dir)
 
