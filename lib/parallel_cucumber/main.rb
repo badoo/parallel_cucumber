@@ -1,5 +1,4 @@
 require 'parallel'
-require 'pry'
 
 module ParallelCucumber
   class Main
