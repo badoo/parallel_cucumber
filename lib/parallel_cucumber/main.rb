@@ -121,7 +121,7 @@ module ParallelCucumber
       Helper::Command.wrap_block(@options[:log_decoration],
                                  @options[:log_decoration]['worker_block'] || 'workers',
                                  @logger) do
-        remaining = (0...number_of_workers - 1).to_a
+        remaining = (0...number_of_workers).to_a
         map = Parallel.map(
           remaining.dup,
           in_threads: number_of_workers,
