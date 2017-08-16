@@ -1,6 +1,7 @@
 module ParallelCucumber
   module Helper
     module Command
+      class TimedOutError < RuntimeError; end
       class << self
         def wrap_block(log_decoration, block_name, logger)
           [$stdout, $stderr].each(&:flush)
@@ -30,7 +31,7 @@ module ParallelCucumber
           pout = nil
           out_string = ''
           begin
-            completed = Timeout.timeout(timeout) do
+            completed = begin
               pin, pout, pstat = Open3.popen2e(env, full_script)
               logger << "Command has pid #{pstat[:pid]}\n"
               pin.close
@@ -55,6 +56,7 @@ module ParallelCucumber
                   logger << "\n== Left out_reader; pipe=#{pstat.status}+#{pstat.status ? '≤no value≥' : pstat.value}\n"
                 end
               end
+              throw TimedOutError unless out_reader.join(timeout)
               out_reader.value # Should terminate with pstat
               pout.close
               if pstat.status
@@ -71,7 +73,8 @@ module ParallelCucumber
             end
             logger << "#{completed}\n"
             return pstat.value.success?
-          rescue Timeout::Error
+          rescue TimedOutError
+            out_reader.exit
             tree = Helper::Processes.ps_tree
             pid = pstat[:pid].to_s
             unless Helper::Processes.ms_windows?
@@ -83,9 +86,9 @@ module ParallelCucumber
 
             logger << "Timeout, so trying SIGINT at #{pstat[:pid]}=#{full_script}"
 
-            Timeout.timeout(2) do
-              pout.each_line { |l| logger << l }
-            end
+            log_copy = new Thread { pout.each_line { |l| logger << l } }
+            log_copy.exit unless log_copy.join(2)
+
             pout.close
 
             wait_sigint = 15
