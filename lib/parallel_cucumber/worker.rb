@@ -102,7 +102,11 @@ module ParallelCucumber
             loop do
               break if queue.empty? && directed_queue.empty?
               batch = []
-              precheck(env)
+              precmd = precheck(env)
+              if (m = precmd.match(/precmd:retry-after-(\d+)-seconds/))
+                sleep(1 + m[1].to_i)
+                next
+              end
               @batch_size.times do
                 # TODO: Handle recovery of possibly toxic dequeued undirected tests if a worker dies mid-processing.
                 batch << (directed_queue.empty? ? queue : directed_queue).dequeue
@@ -148,11 +152,11 @@ module ParallelCucumber
     end
 
     def precheck(env)
-      return unless @pre_check
+      return 'default no-op pre_check' unless @pre_check
       continue = Helper::Command.exec_command(
-        env, 'precheck', @pre_check, @logger, @log_decoration, @batch_timeout
+        env, 'precheck', @pre_check, @logger, @log_decoration, timeout: @batch_timeout, capture: true
       )
-      return if continue
+      return continue if continue
       @logger.error('Pre-check failed: quitting immediately')
       raise 'Pre-check failed: quitting immediately'
     end
@@ -202,7 +206,7 @@ module ParallelCucumber
       file_map.each { |_user, worker| FileUtils.mkpath(worker) if worker =~ %r{\/$} }
       mapped_batch_cmd += ' ' + tests.join(' ')
       res = ParallelCucumber::Helper::Command.exec_command(
-        batch_env, 'batch', mapped_batch_cmd, @logger, @log_decoration, @batch_timeout
+        batch_env, 'batch', mapped_batch_cmd, @logger, @log_decoration, timeout: @batch_timeout
       )
       if res.nil?
         {}
@@ -226,7 +230,7 @@ module ParallelCucumber
     def teardown(env)
       return unless @teardown_worker
       mm, ss = time_it do
-        @logger.info('Teardown running')
+        @logger.info("Teardown running at #{Time.now}")
         success = Helper::Command.exec_command(
           env, 'teardown', @teardown_worker, @logger, @log_decoration
         )
@@ -242,7 +246,7 @@ module ParallelCucumber
       mm, ss = time_it do
         @logger.info('Setup running')
         success = Helper::Command.exec_command(
-          env, 'setup', @setup_worker, @logger, @log_decoration, @setup_timeout
+          env, 'setup', @setup_worker, @logger, @log_decoration, timeout: @setup_timeout
         )
         unless success
           @logger.warn("Setup failed: #{@index} quitting immediately")
