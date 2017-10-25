@@ -26,7 +26,7 @@ module ParallelCucumber
           logger << format(log_decoration['start'] + "\n", block_name) if log_decoration['start']
           full_script = "#{script} 2>&1"
           env_string = env.map { |k, v| "#{k}=#{v}" }.sort.join(' ')
-          logger << "== Running command `#{full_script}` at ${Time.now}\n== with environment variables: #{env_string}\n"
+          logger << "== Running command `#{full_script}` at #{Time.now}\n== with environment variables: #{env_string}\n"
           pstat = nil
           pout = nil
           capture &&= ''
@@ -56,7 +56,7 @@ module ParallelCucumber
                   logger << "\n== Exception in out_reader due to #{e.inspect} #{e.backtrace}\n"
                 ensure
                   logger << out_string
-                  logger << ["\n== Left out_reader at ${Time.now}; ",
+                  logger << ["\n== Left out_reader at #{Time.now}; ",
                              "pipe=#{pstat.status}+#{pstat.status ? '≤no value≥' : pstat.value}\n"].join
                 end
               end
@@ -73,7 +73,7 @@ module ParallelCucumber
                 end # Make an effort to reap
               end
               pstat.value # reap already-terminated child.
-              "Command completed #{pstat.value} at ${Time.now}"
+              "Command completed #{pstat.value} at #{Time.now}"
             end
             logger << "#{completed}\n"
             return pstat.value.success? ? capture || true : false
