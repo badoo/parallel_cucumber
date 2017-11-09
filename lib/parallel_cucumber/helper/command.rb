@@ -16,7 +16,7 @@ module ParallelCucumber
 
         ONE_SECOND = 1
 
-        def exec_command(env, desc, script, logger, log_decoration = {}, timeout = 30) # rubocop:disable Metrics/ParameterLists, Metrics/LineLength
+        def exec_command(env, desc, script, logger, log_decoration = {}, timeout: 30, capture: false) # rubocop:disable Metrics/ParameterLists, Metrics/LineLength
           block_name = ''
           if log_decoration['worker_block']
             if log_decoration['start'] || log_decoration['end']
@@ -26,9 +26,10 @@ module ParallelCucumber
           logger << format(log_decoration['start'] + "\n", block_name) if log_decoration['start']
           full_script = "#{script} 2>&1"
           env_string = env.map { |k, v| "#{k}=#{v}" }.sort.join(' ')
-          logger << "== Running command `#{full_script}`\n== with environment variables: #{env_string}\n"
+          logger << "== Running command `#{full_script}` at #{Time.now}\n== with environment variables: #{env_string}\n"
           pstat = nil
           pout = nil
+          capture &&= ''
           out_string = ''
           begin
             completed = begin
@@ -45,15 +46,18 @@ module ParallelCucumber
                     end
                     next unless io_select
                     # Windows doesn't support read_nonblock!
-                    out_string = log_until_incomplete_line(logger, out_string + pout.readpartial(8192))
+                    partial = pout.readpartial(8192)
+                    capture += partial if capture
+                    out_string = log_until_incomplete_line(logger, out_string + partial)
                   end
                 rescue EOFError
-                  logger << "\n== EOF: expected exit, #{pstat.inspect}\n"
+                  logger << "\n== EOF is normal exit, #{pstat.inspect}\n"
                 rescue => e
                   logger << "\n== Exception in out_reader due to #{e.inspect} #{e.backtrace}\n"
                 ensure
                   logger << out_string
-                  logger << "\n== Left out_reader; pipe=#{pstat.status}+#{pstat.status ? '≤no value≥' : pstat.value}\n"
+                  logger << ["\n== Left out_reader at #{Time.now}; ",
+                             "pipe=#{pstat.status}+#{pstat.status ? '≤no value≥' : pstat.value}\n"].join
                 end
               end
               throw TimedOutError unless out_reader.join(timeout)
@@ -69,10 +73,10 @@ module ParallelCucumber
                 end # Make an effort to reap
               end
               pstat.value # reap already-terminated child.
-              "Command completed #{pstat.value}"
+              "Command completed #{pstat.value} at #{Time.now}"
             end
             logger << "#{completed}\n"
-            return pstat.value.success?
+            return pstat.value.success? ? capture || true : false
           rescue TimedOutError
             out_reader.exit
             tree = Helper::Processes.ps_tree
