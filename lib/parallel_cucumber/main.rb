@@ -60,12 +60,12 @@ module ParallelCucumber
 
       number_of_workers = determine_work_and_batch_size(count)
 
-      diff = []
+      unrun = []
       status_totals = {}
       total_mm, total_ss = time_it do
         results = run_parallel_workers(number_of_workers) || {}
         unrun = tests - results.keys
-        @logger.error("Tests #{unrun.join(' ')} were not run") unless diff.empty?
+        @logger.error("Tests #{unrun.join(' ')} were not run") unless unrun.empty?
         @logger.error("Queue #{queue.name} is not empty") unless queue.empty?
 
         status_totals = Status.constants.map do |status|
@@ -91,7 +91,7 @@ module ParallelCucumber
 
       @logger.info("\nTook #{total_mm} minutes #{total_ss} seconds")
 
-      exit((diff + status_totals[Status::FAILED] + status_totals[Status::UNKNOWN]).empty? ? 0 : 1)
+      exit((unrun + status_totals[Status::FAILED] + status_totals[Status::UNKNOWN]).empty? ? 0 : 1)
     end
 
     def report_by_group(results)
