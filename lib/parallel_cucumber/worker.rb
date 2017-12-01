@@ -31,6 +31,7 @@ module ParallelCucumber
       @cucumber_options = options[:cucumber_options]
       @test_command = options[:test_command]
       @pre_check = options[:pre_check]
+      @on_batch_error = options[:on_batch_error]
       @index = index
       @queue_connection_params = options[:queue_connection_params]
       @setup_worker = options[:setup_worker]
@@ -153,12 +154,41 @@ module ParallelCucumber
 
     def precheck(env)
       return 'default no-op pre_check' unless @pre_check
-      continue = Helper::Command.exec_command(
-        env, 'precheck', @pre_check, @logger, @log_decoration, timeout: @batch_timeout, capture: true
-      )
-      return continue if continue
-      @logger.error('Pre-check failed: quitting immediately')
-      raise 'Pre-check failed: quitting immediately'
+      begin
+        return Helper::Command.exec_command(
+          env, 'precheck', @pre_check, @logger, @log_decoration, timeout: @batch_timeout, capture: true
+        )
+      rescue
+        @logger.error('Pre-check failed: quitting immediately')
+        raise 'Pre-check failed: quitting immediately'
+      end
+    end
+
+    def on_batch_error(batch_env, batch_id, error_file, tests, error)
+      unless @on_batch_error
+        return 'default no-op on_batch_error'
+      end
+
+      begin
+        error_info = {
+            class: error.class,
+            message: error.message,
+            backtrace: error.backtrace
+        }
+        batch_error_info = {
+            batch_id: batch_id,
+            tests: tests,
+            error: error_info
+        }
+        File.write(error_file, batch_error_info.to_json)
+        command = "#{@on_batch_error} #{error_file}"
+        return Helper::Command.exec_command(
+            batch_env, 'on_batch_error', command, @logger, @log_decoration, timeout: @batch_timeout, capture: true
+        )
+      rescue => e
+        message = "on-batch-error failed: #{e.message}"
+        @logger.warn(message)
+      end
     end
 
     def running_totals(batch_results, running_total)
@@ -205,24 +235,26 @@ module ParallelCucumber
       mapped_batch_cmd, file_map = Helper::Cucumber.batch_mapped_files(cmd, test_batch_dir, batch_env)
       file_map.each { |_user, worker| FileUtils.mkpath(worker) if worker =~ %r{\/$} }
       mapped_batch_cmd += ' ' + tests.join(' ')
-      res = ParallelCucumber::Helper::Command.exec_command(
-        batch_env, 'batch', mapped_batch_cmd, @logger, @log_decoration, timeout: @batch_timeout
-      )
-      if res.nil?
-        {}
-      else
-        Helper::Command.wrap_block(@log_decoration, 'file copy', @logger) do
-          # Copy files we might have renamed or moved
-          file_map.each do |user, worker|
-            next if worker == user
-            Helper::Processes.cp_rv(worker, user, @logger)
-          end
-          # Copy everything else too, in case it's interesting.
-          Helper::Processes.cp_rv("#{test_batch_dir}/*", @log_dir, @logger)
-          parse_results(test_state)
-        end
+      begin
+        ParallelCucumber::Helper::Command.exec_command(
+          batch_env, 'batch', mapped_batch_cmd, @logger, @log_decoration, timeout: @batch_timeout
+        )
+      rescue => e
+        error_file = "#{test_batch_dir}/error.json"
+        on_batch_error(batch_env, batch_id, error_file, tests, e)
+        return {}
       end
+      parse_results(test_state)
     ensure
+      Helper::Command.wrap_block(@log_decoration, 'file copy', @logger) do
+        # Copy files we might have renamed or moved
+        file_map.each do |user, worker|
+          next if worker == user
+          Helper::Processes.cp_rv(worker, user, @logger)
+        end
+        # Copy everything else too, in case it's interesting.
+        Helper::Processes.cp_rv("#{test_batch_dir}/*", @log_dir, @logger)
+      end
       @logger.update_into(@stdout_logger)
       FileUtils.rm_rf(test_batch_dir)
     end
@@ -231,10 +263,14 @@ module ParallelCucumber
       return unless @teardown_worker
       mm, ss = time_it do
         @logger.info("Teardown running at #{Time.now}")
-        success = Helper::Command.exec_command(
-          env, 'teardown', @teardown_worker, @logger, @log_decoration
-        )
-        @logger.warn('Teardown finished with error') unless success
+
+        begin
+          Helper::Command.exec_command(
+            env, 'teardown', @teardown_worker, @logger, @log_decoration
+          )
+        rescue
+          @logger.warn('Teardown finished with error')
+        end
       end
     ensure
       @logger.debug("Teardown took #{mm} minutes #{ss} seconds")
@@ -245,10 +281,12 @@ module ParallelCucumber
       return unless @setup_worker
       mm, ss = time_it do
         @logger.info('Setup running')
-        success = Helper::Command.exec_command(
-          env, 'setup', @setup_worker, @logger, @log_decoration, timeout: @setup_timeout
-        )
-        unless success
+
+        begin
+          Helper::Command.exec_command(
+            env, 'setup', @setup_worker, @logger, @log_decoration, timeout: @setup_timeout
+          )
+        rescue
           @logger.warn("Setup failed: #{@index} quitting immediately")
           raise 'Setup failed: quitting immediately'
         end
