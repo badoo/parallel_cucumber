@@ -54,7 +54,7 @@ module ParallelCucumber
 
             logger << "#{completed}\n"
 
-            raise "Script retuned #{pstat.value.rc}" unless pstat.value.success?
+            raise "Script returned #{pstat.value.exitstatus}" unless pstat.value.success?
 
             return (capture && capture.first) || true
           rescue TimedOutError => e
