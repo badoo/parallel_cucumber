@@ -53,7 +53,10 @@ module ParallelCucumber
             end
 
             logger << "#{completed}\n"
-            return pstat.value.success? ? (capture && capture.first) || true : false
+
+            raise "Script retuned #{pstat.value.rc}" unless pstat.value.success?
+
+            return (capture && capture.first) || true
           rescue TimedOutError => e
             force_kill_process_with_tree(out_reader, pstat, pout, full_script, logger, timeout)
 
@@ -126,7 +129,7 @@ module ParallelCucumber
           "Command completed #{pstat.value} at #{Time.now}"
         end
 
-        def force_kill_process_with_tree(out_reader, pstat, pout, full_script, logger, timeout)
+        def force_kill_process_with_tree(out_reader, pstat, pout, full_script, logger, timeout) # rubocop:disable Metrics/ParameterLists, Metrics/LineLength
           out_reader.exit
           tree = Helper::Processes.ps_tree
           pid = pstat[:pid].to_s
