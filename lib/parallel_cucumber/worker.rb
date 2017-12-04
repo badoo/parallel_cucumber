@@ -141,9 +141,9 @@ module ParallelCucumber
 
       batch_mm, batch_ss = time_it do
         batch_results = test_batch(batch_id, env, running_total, tests)
-
+        @logger << "#{Time.now} To process"
         process_results(batch_results, tests)
-
+        @logger << "#{Time.now} To totals"
         running_totals(batch_results, running_total)
         results.merge!(batch_results)
       end
@@ -201,8 +201,7 @@ module ParallelCucumber
         running_total[s] += tt.count unless tt.empty?
       end
       running_total[:batches] += 1
-      running_total[:z] = Time.now.to_s
-      @logger.info(running_total.sort.to_s)
+      @logger.info(running_total.sort.to_s + ' t=' + Time.now.to_s)
     end
 
     def process_results(batch_results, tests)
@@ -241,9 +240,12 @@ module ParallelCucumber
           batch_env, 'batch', mapped_batch_cmd, @logger, @log_decoration, timeout: @batch_timeout
         )
       rescue => e
-        error_file = "#{test_batch_dir}/error.json"
-        on_batch_error(batch_env, batch_id, error_file, tests, e)
-        return {}
+        unless e.is_a?(RuntimeError) && e.message == 'Script returned 1'
+          error_file = "#{test_batch_dir}/error.json"
+          on_batch_error(batch_env, batch_id, error_file, tests, e)
+          return {}
+        end
+        # We ignore cucumber's return code of 1
       end
       parse_results(test_state)
     ensure
@@ -253,21 +255,21 @@ module ParallelCucumber
           next if worker == user
           Helper::Processes.cp_rv(worker, user, @logger)
         end
-        @logger << "Copied files in map: #{file_map.first(5)}...#{file_map.count}  #{Time.now}"
+        @logger << "\nCopied files in map: #{file_map.first(5)}...#{file_map.count}  #{Time.now}\n"
         # Copy everything else too, in case it's interesting.
         Helper::Processes.cp_rv("#{test_batch_dir}/*", @log_dir, @logger)
-        @logger << "Copied everything else #{Time.now}  #{Time.now}"
+        @logger << "\nCopied everything else #{Time.now}  #{Time.now}\n"
       end
       @logger.update_into(@stdout_logger)
       FileUtils.rm_rf(test_batch_dir)
-      @logger << "Removed all files  #{Time.now}" # Tracking down 30 minute pause!
+      @logger << "\nRemoved all files  #{Time.now}\n" # Tracking down 30 minute pause!
       @logger.update_into(@stdout_logger)
     end
 
     def teardown(env)
       return unless @teardown_worker
       mm, ss = time_it do
-        @logger.info("Teardown running at #{Time.now}")
+        @logger.info("\nTeardown running at #{Time.now}\n")
 
         begin
           Helper::Command.exec_command(
