@@ -8,6 +8,8 @@ module ParallelCucumber
       batch_size: 1,
       batch_timeout: 600,
       setup_timeout: 30,
+      precheck_timeout: 30,
+      batch_error_timeout: 30,
       cucumber_options: '',
       debug: false,
       directed_tests: {},
@@ -83,8 +85,7 @@ module ParallelCucumber
 
         opts.on('--on-batch-error COMMAND',
                 'Command to call on any error happened while running batch of tests.
-                 It will receive as argument json file with list of tests and error happened.'
-        ) do |on_batch_error|
+                 It will receive as argument json file with list of tests and error happened.') do |on_batch_error|
           options[:on_batch_error] = on_batch_error
         end
 
@@ -167,6 +168,20 @@ module ParallelCucumber
         TEXT
         opts.on('--batch-timeout SECONDS', Float, help_message) do |batch_timeout|
           options[:batch_timeout] = batch_timeout
+        end
+
+        help_message = <<-TEXT.gsub(/\s+/, ' ').strip
+          Timeout for each test precheck. Default is #{DEFAULTS[:batch_timeout]}
+        TEXT
+        opts.on('--precheck-timeout SECONDS', Float, help_message) do |timeout|
+          options[:precheck_timeout] = timeout
+        end
+
+        help_message = <<-TEXT.gsub(/\s+/, ' ').strip
+          Timeout for each batch_error script. Default is #{DEFAULTS[:batch_error_timeout]}
+        TEXT
+        opts.on('--batch-error-timeout SECONDS', Float, help_message) do |timeout|
+          options[:batch_error_timeout] = timeout
         end
 
         help_message = <<-TEXT.gsub(/\s+/, ' ').strip

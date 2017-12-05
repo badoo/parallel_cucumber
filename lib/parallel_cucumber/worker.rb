@@ -27,6 +27,8 @@ module ParallelCucumber
       @batch_size = options[:batch_size]
       @group_by = options[:group_by]
       @batch_timeout = options[:batch_timeout]
+      @batch_error_timeout = options[:batch_error_timeout]
+      @precheck_timeout = options[:precheck_timeout]
       @setup_timeout = options[:setup_timeout]
       @cucumber_options = options[:cucumber_options]
       @test_command = options[:test_command]
@@ -141,9 +143,7 @@ module ParallelCucumber
 
       batch_mm, batch_ss = time_it do
         batch_results = test_batch(batch_id, env, running_total, tests)
-        @logger << "#{Time.now} To process"
         process_results(batch_results, tests)
-        @logger << "#{Time.now} To totals"
         running_totals(batch_results, running_total)
         results.merge!(batch_results)
       end
@@ -156,7 +156,7 @@ module ParallelCucumber
       return 'default no-op pre_check' unless @pre_check
       begin
         return Helper::Command.exec_command(
-          env, 'precheck', @pre_check, @logger, @log_decoration, timeout: @batch_timeout, capture: true
+          env, 'precheck', @pre_check, @logger, @log_decoration, timeout: @precheck_timeout, capture: true
         )
       rescue
         @logger.error('Pre-check failed: quitting immediately')
@@ -165,9 +165,7 @@ module ParallelCucumber
     end
 
     def on_batch_error(batch_env, batch_id, error_file, tests, error)
-      unless @on_batch_error
-        return 'default no-op on_batch_error'
-      end
+      return unless @on_batch_error
 
       begin
         error_info = {
@@ -182,8 +180,8 @@ module ParallelCucumber
         }
         File.write(error_file, batch_error_info.to_json)
         command = "#{@on_batch_error} #{error_file}"
-        return Helper::Command.exec_command(
-          batch_env, 'on_batch_error', command, @logger, @log_decoration, timeout: @batch_timeout, capture: true
+        Helper::Command.exec_command(
+          batch_env, 'on_batch_error', command, @logger, @log_decoration, timeout: @batch_error_timeout
         )
       rescue => e
         message = "on-batch-error failed: #{e.message}"
@@ -237,15 +235,13 @@ module ParallelCucumber
       mapped_batch_cmd += ' ' + tests.join(' ')
       begin
         ParallelCucumber::Helper::Command.exec_command(
-          batch_env, 'batch', mapped_batch_cmd, @logger, @log_decoration, timeout: @batch_timeout
+          batch_env, 'batch', mapped_batch_cmd, @logger, @log_decoration,
+          timeout: @batch_timeout, return_batch_error: true
         )
       rescue => e
-        unless e.is_a?(RuntimeError) && e.message == 'Script returned 1'
-          error_file = "#{test_batch_dir}/error.json"
-          on_batch_error(batch_env, batch_id, error_file, tests, e)
-          return {}
-        end
-        # We ignore cucumber's return code of 1
+        error_file = "#{test_batch_dir}/error.json"
+        on_batch_error(batch_env, batch_id, error_file, tests, e)
+        return { script_failure: 1 }
       end
       parse_results(test_state)
     ensure
@@ -273,7 +269,7 @@ module ParallelCucumber
 
         begin
           Helper::Command.exec_command(
-            env, 'teardown', @teardown_worker, @logger, @log_decoration
+            env, 'teardown', @teardown_worker, @logger, @log_decoration, timeout: @setup_timeout
           )
         rescue
           @logger.warn('Teardown finished with error')
@@ -290,9 +286,7 @@ module ParallelCucumber
         @logger.info('Setup running')
 
         begin
-          Helper::Command.exec_command(
-            env, 'setup', @setup_worker, @logger, @log_decoration, timeout: @setup_timeout
-          )
+          Helper::Command.exec_command(env, 'setup', @setup_worker, @logger, @log_decoration, timeout: @setup_timeout)
         rescue
           @logger.warn("Setup failed: #{@index} quitting immediately")
           raise 'Setup failed: quitting immediately'
@@ -306,18 +300,18 @@ module ParallelCucumber
     def parse_results(f)
       unless File.file?(f)
         @logger.error("Results file does not exist: #{f}")
-        return {}
+        return { results_missing: 1 }
       end
       json_report = File.read(f)
       if json_report.empty?
         @logger.error("Results file is empty: #{f}")
-        return {}
+        return { results_empty: 1 }
       end
       Helper::Cucumber.parse_json_report(json_report)
     rescue => e
       trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
       @logger.error("Threw: JSON parse of results caused #{trace}")
-      {}
+      { json_fail: 1 }
     end
   end
 end

@@ -16,7 +16,7 @@ module ParallelCucumber
 
         ONE_SECOND = 1
 
-        def exec_command(env, desc, script, logger, log_decoration = {}, timeout: 30, capture: false) # rubocop:disable Metrics/ParameterLists, Metrics/LineLength
+        def exec_command(env, desc, script, logger, log_decoration = {}, timeout: 30, capture: false, return_script_error: false) # rubocop:disable Metrics/ParameterLists, Metrics/LineLength
           block_name = ''
           if log_decoration['worker_block']
             if log_decoration['start'] || log_decoration['end']
@@ -54,9 +54,10 @@ module ParallelCucumber
 
             logger << "#{completed}\n"
 
-            raise "Script returned #{pstat.value.exitstatus}" unless pstat.value.success?
+            raise "Script returned #{pstat.value.exitstatus}" unless pstat.value.success? || return_script_error
 
-            return (capture && capture.first) || true
+            capture_or_empty = capture ? capture.first : '' # Even '' is truthy
+            return pstat.value.success? ? capture_or_empty : nil
           rescue TimedOutError => e
             force_kill_process_with_tree(out_reader, pstat, pout, full_script, logger, timeout)
 
