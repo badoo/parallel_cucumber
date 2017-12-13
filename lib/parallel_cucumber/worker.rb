@@ -236,9 +236,10 @@ module ParallelCucumber
       begin
         ParallelCucumber::Helper::Command.exec_command(
           batch_env, 'batch', mapped_batch_cmd, @logger, @log_decoration,
-          timeout: @batch_timeout, return_batch_error: true
+          timeout: @batch_timeout, return_script_error: true
         )
       rescue => e
+        @logger << "ERROR #{e} #{e.backtrace.first(5)}"
         error_file = "#{test_batch_dir}/error.json"
         on_batch_error(batch_env, batch_id, error_file, tests, e)
         return { script_failure: 1 }
