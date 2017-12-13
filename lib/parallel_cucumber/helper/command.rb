@@ -16,7 +16,7 @@ module ParallelCucumber
 
         ONE_SECOND = 1
 
-        def exec_command(env, desc, script, logger, log_decoration = {}, timeout: 30, capture: false) # rubocop:disable Metrics/ParameterLists, Metrics/LineLength
+        def exec_command(env, desc, script, logger, log_decoration = {}, timeout: 30, capture: false, return_script_error: false) # rubocop:disable Metrics/ParameterLists, Metrics/LineLength
           block_name = ''
           if log_decoration['worker_block']
             if log_decoration['start'] || log_decoration['end']
@@ -30,7 +30,7 @@ module ParallelCucumber
           logger << "== Running command `#{full_script}` at #{Time.now}\n== with environment variables: #{env_string}\n"
           pstat = nil
           pout = nil
-          capture &&= ''
+          capture &&= [''] # Pass by reference
           exception = nil
 
           begin
@@ -39,7 +39,7 @@ module ParallelCucumber
               logger << "Command has pid #{pstat[:pid]}\n"
               pin.close
               out_reader = Thread.new do
-                output_reader(pout, pstat, logger)
+                output_reader(pout, pstat, logger, capture)
               end
 
               unless out_reader.join(timeout)
@@ -53,7 +53,11 @@ module ParallelCucumber
             end
 
             logger << "#{completed}\n"
-            return pstat.value.success? ? capture || true : false
+
+            raise "Script returned #{pstat.value.exitstatus}" unless pstat.value.success? || return_script_error
+
+            capture_or_empty = capture ? capture.first : '' # Even '' is truthy
+            return pstat.value.success? ? capture_or_empty : nil
           rescue TimedOutError => e
             force_kill_process_with_tree(out_reader, pstat, pout, full_script, logger, timeout)
 
@@ -83,7 +87,7 @@ module ParallelCucumber
 
         private
 
-        def output_reader(pout, pstat, logger)
+        def output_reader(pout, pstat, logger, capture)
           out_string = ''
 
           loop do
@@ -95,7 +99,7 @@ module ParallelCucumber
             next unless io_select
             # Windows doesn't support read_nonblock!
             partial = pout.readpartial(8192)
-            capture += partial if capture
+            capture[0] += partial if capture
             out_string = log_until_incomplete_line(logger, out_string + partial)
           end
         rescue EOFError
@@ -126,7 +130,7 @@ module ParallelCucumber
           "Command completed #{pstat.value} at #{Time.now}"
         end
 
-        def force_kill_process_with_tree(out_reader, pstat, pout, full_script, logger, timeout)
+        def force_kill_process_with_tree(out_reader, pstat, pout, full_script, logger, timeout) # rubocop:disable Metrics/ParameterLists, Metrics/LineLength
           out_reader.exit
           tree = Helper::Processes.ps_tree
           pid = pstat[:pid].to_s
@@ -168,7 +172,6 @@ module ParallelCucumber
             logger << "Reaped root #{pid}"
           end
         end
-
       end
     end
   end
