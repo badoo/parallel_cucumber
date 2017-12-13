@@ -11,7 +11,7 @@ GEM
   specs:
     ast (2.3.0)
     builder (3.2.3)
-    childprocess (0.5.9)
+    childprocess (0.8.0)
       ffi (~> 1.0, >= 1.0.11)
     cucumber (2.99.0)
       builder (>= 2.1.2)
@@ -25,36 +25,39 @@ GEM
       gherkin (~> 4.0)
     cucumber-wire (0.0.1)
     diff-lcs (1.3)
-    ffi (1.9.14)
+    ffi (1.9.18)
     gherkin (4.1.3)
-    iniparse (1.4.2)
+    iniparse (1.4.4)
     multi_json (1.12.2)
     multi_test (0.1.2)
-    overcommit (0.32.0)
-      childprocess (~> 0.5.8)
+    overcommit (0.41.0)
+      childprocess (~> 0.6, >= 0.6.3)
       iniparse (~> 1.4)
     parallel (1.12.0)
-    parser (2.3.1.4)
-      ast (~> 2.2)
+    parser (2.4.0.2)
+      ast (~> 2.3)
     powerpack (0.1.1)
-    rainbow (2.1.0)
+    rainbow (2.2.2)
+      rake
+    rake (12.3.0)
     redis (3.3.5)
-    rubocop (0.43.0)
-      parser (>= 2.3.1.1, < 3.0)
+    rubocop (0.51.0)
+      parallel (~> 1.10)
+      parser (>= 2.3.3.1, < 3.0)
       powerpack (~> 0.1)
-      rainbow (>= 1.99.1, < 3.0)
+      rainbow (>= 2.2.2, < 3.0)
       ruby-progressbar (~> 1.7)
       unicode-display_width (~> 1.0, >= 1.0.1)
-    ruby-progressbar (1.8.1)
-    unicode-display_width (1.1.1)
+    ruby-progressbar (1.9.0)
+    unicode-display_width (1.3.0)
 
 PLATFORMS
   ruby
 
 DEPENDENCIES
-  overcommit (~> 0.31)
+  overcommit (~> 0.41)
   parallel_cucumber!
-  rubocop (~> 0.43)
+  rubocop (~> 0.51)
 
 BUNDLED WITH
    1.16.0
