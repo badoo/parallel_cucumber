@@ -143,6 +143,7 @@ module ParallelCucumber
 
       batch_mm, batch_ss = time_it do
         batch_results = test_batch(batch_id, env, running_total, tests)
+        Hooks.fire_after_batch_hooks(batch_results)
         process_results(batch_results, tests)
         running_totals(batch_results, running_total)
         results.merge!(batch_results)
