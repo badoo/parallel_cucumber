@@ -14,6 +14,9 @@ module ParallelCucumber
         @after_batch_hooks.each do |hook|
           hook.call(*args)
         end
+      rescue => e
+        @logger.warn("There was exception in after_batch hook")
+        @logger.warn(e.backtrace)
       end
 
     end
