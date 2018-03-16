@@ -143,7 +143,12 @@ module ParallelCucumber
 
       batch_mm, batch_ss = time_it do
         batch_results = test_batch(batch_id, env, running_total, tests)
-        Hooks.fire_after_batch_hooks(batch_results, batch_id, env)
+        begin
+          Hooks.fire_after_batch_hooks(batch_results, batch_id, env)
+        rescue => e
+          @logger.warn("There was exception in after_batch hook")
+          @logger.warn(e.backtrace)
+        end
         process_results(batch_results, tests)
         running_totals(batch_results, running_total)
         results.merge!(batch_results)
