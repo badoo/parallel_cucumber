@@ -14,6 +14,7 @@ module ParallelCucumber
     end
 
     def load_external_files
+      return if @options[:load_files].nil?
       @options[:load_files].each do |file|
         @logger.debug("Loading File: #{file}")
         load file
