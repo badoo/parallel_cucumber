@@ -147,7 +147,7 @@ module ParallelCucumber
           Hooks.fire_after_batch_hooks(batch_results, batch_id, env)
         rescue => e
           trace = e.backtrace.join("\n\t")
-          @logger.warn("There was exception in after_batch hook #{trace}")
+          @logger.warn("There was exception in after_batch hook #{e.message} \n #{trace}")
         end
         process_results(batch_results, tests)
         running_totals(batch_results, running_total)

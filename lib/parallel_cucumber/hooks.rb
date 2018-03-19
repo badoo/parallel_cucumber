@@ -1,11 +1,9 @@
 module ParallelCucumber
   class Hooks
-
     @after_batch_hooks ||= []
 
     class << self
-
-      def after_batch(&proc)
+      def register_after_batch( proc)
         raise 'Please provide a valid callback' unless proc.respond_to?(:call)
         @after_batch_hooks << proc
       end
