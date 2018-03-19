@@ -65,6 +65,12 @@ module ParallelCucumber
           options[:cucumber_options] = cucumber_options
         end
 
+        opts.on('-r', '--require "file_path"', 'Load files for parallel_cucumber') do |load_file|
+          raise(ArgumentError, "No such file to load: #{load_file}") unless File.exist?(load_file)
+          options[:load_files] ||= []
+          options[:load_files] << load_file
+        end
+
         opts.on('--directed-tests JSON', 'Direct tests to specific workers, e.g. {"0": "-t @head"}') do |json|
           options[:directed_tests] = begin
             JSON.parse(json)

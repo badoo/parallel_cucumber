@@ -8,8 +8,17 @@ module ParallelCucumber
       @options = options
 
       @logger = ParallelCucumber::CustomLogger.new(STDOUT)
+      load_external_files
       @logger.progname = 'Primary' # Longer than 'Main', to make the log file pretty.
       @logger.level = options[:debug] ? ParallelCucumber::CustomLogger::DEBUG : ParallelCucumber::CustomLogger::INFO
+    end
+
+    def load_external_files
+      return if @options[:load_files].nil?
+      @options[:load_files].each do |file|
+        @logger.debug("Loading File: #{file}")
+        load file
+      end
     end
 
     def run
