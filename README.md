@@ -7,6 +7,7 @@ Usage: parallel_cucumber [options] [ [FILE|DIR|URL][:LINE[:LINE]*] ]
 Example: parallel_cucumber -n 4 -o "-f pretty -f html -o report.html" examples/i18n/en/features
     -n WORKERS                       How many workers to use. Default is 1 or longest list in -e
     -o, --cucumber-options "OPTIONS" Run cucumber with these options
+    -r, --require "file_path"        Load files for parallel_cucumber
         --directed-tests JSON        Direct tests to specific workers, e.g. {"0": "-t @head"}
         --test-command COMMAND       Command to run for test phase, default cucumber
         --pre-batch-check COMMAND    Command causing worker to quit on exit failure
@@ -25,6 +26,9 @@ Example: parallel_cucumber -n 4 -o "-f pretty -f html -o report.html" examples/i
         --teardown-worker SCRIPT     Execute SCRIPT after each worker
         --worker-delay SECONDS       Delay before next worker starting. Could be used for avoiding 'spikes' in CPU and RAM usage Default is 0
         --batch-timeout SECONDS      Timeout for each batch of tests. Default is 600
+        --precheck-timeout SECONDS   Timeout for each test precheck. Default is 600
+        --batch-error-timeout SECONDS
+                                     Timeout for each batch_error script. Default is 30
         --setup-timeout SECONDS      Timeout for each worker's set-up phase. Default is 30
         --debug                      Print more debug information
         --long-running-tests STRING  Cucumber arguments for long-running-tests
