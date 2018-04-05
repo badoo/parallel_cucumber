@@ -142,10 +142,17 @@ module ParallelCucumber
       @logger.info("Took #{tests.count} from the queue (#{queue_tracker.status}): #{tests.join(' ')}")
 
       batch_mm, batch_ss = time_it do
+        begin
+          Hooks.fire_before_batch_hooks(tests, batch_id, env)
+        rescue StandardError => e
+          trace = e.backtrace.join("\n\t")
+          @logger.warn("There was exception in before_batch hook #{e.message} \n #{trace}")
+        end
+
         batch_results = test_batch(batch_id, env, running_total, tests)
         begin
           Hooks.fire_after_batch_hooks(batch_results, batch_id, env)
-        rescue => e
+        rescue StandardError => e
           trace = e.backtrace.join("\n\t")
           @logger.warn("There was exception in after_batch hook #{e.message} \n #{trace}")
         end
