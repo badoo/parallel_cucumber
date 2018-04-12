@@ -58,6 +58,8 @@ module ParallelCucumber
           options = options.dup
           options = expand_profiles(options) unless config_file.nil?
           options = remove_formatters(options)
+          options = remove_dry_run_flag(options)
+          options = remove_strict_flag(options)
           content = nil
 
           Tempfile.open(%w(dry-run .json)) do |f|
@@ -102,7 +104,15 @@ module ParallelCucumber
         end
 
         def remove_formatters(options)
-          options.gsub(/(^|\s)(--format|-f|--out|-o)\s+[\S]+/, '\\1').gsub(/(\s|^)--dry-run\s+/, '\\1')
+          options.gsub(/(^|\s)(--format|-f|--out|-o)\s+[\S]+/, ' ')
+        end
+
+        def remove_dry_run_flag(options)
+          options.gsub(/(^|\s)--dry-run(\s|$)/, ' ')
+        end
+
+        def remove_strict_flag(options)
+          options.gsub(/(^|\s)(--strict|-S)(\s|$)/, ' ')
         end
       end
     end
