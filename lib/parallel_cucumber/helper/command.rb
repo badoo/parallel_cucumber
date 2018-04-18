@@ -137,7 +137,6 @@ module ParallelCucumber
           unless Helper::Processes.ms_windows?
             logger << "Timeout, so trying SIGUSR1 to trigger watchdog stacktrace #{pstat[:pid]}=#{full_script}"
             Helper::Processes.kill_tree('SIGUSR1', pid, logger, tree)
-            logger << %x(ps -ax)
             sleep 2
           end
 
