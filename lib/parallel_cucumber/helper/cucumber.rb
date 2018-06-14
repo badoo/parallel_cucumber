@@ -34,7 +34,7 @@ module ParallelCucumber
                 background = scenario
                 next
               end
-              steps = [background['steps'], scenario['steps']].flatten.compact
+              steps = [scenario['before'], background['steps'], scenario['steps'], scenario['after']].flatten.compact
               status = case # rubocop:disable Style/EmptyCaseCondition
                        when steps.map { |step| step['result'] }.all? { |result| result['status'] == 'skipped' }
                          Status::SKIPPED
