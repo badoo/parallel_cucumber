@@ -15,7 +15,7 @@ module ParallelCucumber
         end
 
         def on_after_test_case(event)
-          @result[event.test_case.location.to_s.to_sym] = event.result.to_sym
+          @result[event.test_case.location.to_s] = event.result.to_sym
         end
 
         def on_finished_testing(*)
