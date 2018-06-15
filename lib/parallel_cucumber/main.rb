@@ -69,7 +69,6 @@ module ParallelCucumber
 
       number_of_workers = determine_work_and_batch_size(count)
 
-      unrun = []
       status_totals = {}
       total_mm, total_ss = time_it do
         results = run_parallel_workers(number_of_workers) || {}
@@ -100,7 +99,7 @@ module ParallelCucumber
 
       @logger.info("\nTook #{total_mm} minutes #{total_ss} seconds")
 
-      exit((unrun + status_totals[Status::FAILED] + status_totals[Status::UNKNOWN]).empty? ? 0 : 1)
+      exit((tests - status_totals[Status::PASSED] - status_totals[Status::SKIPPED]).empty? ? 0 : 1)
     end
 
     def report_by_group(results)

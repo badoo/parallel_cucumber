@@ -1,8 +1,10 @@
 module ParallelCucumber
   module Status
-    PASSED = :passed
-    FAILED = :failed
-    SKIPPED = :skipped
-    UNKNOWN = :unknown
+    FAILED    = :failed
+    PASSED    = :passed
+    PENDING   = :pending
+    SKIPPED   = :skipped
+    UNDEFINED = :undefined
+    UNKNOWN   = :unknown
   end
 end
