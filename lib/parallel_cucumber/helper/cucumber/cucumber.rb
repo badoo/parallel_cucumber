@@ -25,31 +25,26 @@ module ParallelCucumber
         end
 
         def parse_json_report(json_report)
-          report = JSON.parse(json_report)
-          report.map do |feature|
-            next if feature['elements'].nil?
-            background = {}
-            feature['elements'].map do |scenario|
-              if scenario['type'] == 'background'
-                background = scenario
-                next
-              end
-              steps = [background['steps'], scenario['steps']].flatten.compact
-              status = case # rubocop:disable Style/EmptyCaseCondition
-                       when steps.map { |step| step['result'] }.all? { |result| result['status'] == 'skipped' }
-                         Status::SKIPPED
-                       when steps.map { |step| step['result'] }.any? { |result| result['status'] == 'failed' }
+          report = JSON.parse(json_report, symbolize_names: true)
+          report.map do |scenario, cucumber_status|
+            status = case cucumber_status
+                       when 'failed'
                          Status::FAILED
-                       when steps.map { |step| step['result'] }.all? { |result| result['status'] == 'passed' }
+                       when 'passed'
                          Status::PASSED
-                       when steps.map { |step| step['result'] }.any? { |result| result['status'] == 'undefined' }
+                       when 'pending'
+                         Status::PENDING
+                       when 'skipped'
+                         Status::SKIPPED
+                       when 'undefined'
+                         Status::UNDEFINED
+                       when 'unknown'
                          Status::UNKNOWN
                        else
                          Status::UNKNOWN
-                       end
-              { "#{feature['uri']}:#{scenario['line']}".to_sym => status }
-            end
-          end.flatten.compact.inject(&:merge) || {}
+                     end
+            [scenario, status]
+          end.to_h
         end
 
         private
@@ -63,7 +58,7 @@ module ParallelCucumber
           content = nil
 
           Tempfile.open(%w(dry-run .json)) do |f|
-            dry_run_options = "--dry-run --format json --out #{f.path}"
+            dry_run_options = "--dry-run --format ParallelCucumber::Helper::Cucumber::JsonStatusFormatter --out #{f.path}"
 
             cmd = "cucumber #{options} #{dry_run_options} #{args_string}"
             _stdout, stderr, status = Open3.capture3(cmd)
