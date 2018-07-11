@@ -10,6 +10,7 @@ PreCommit:
       - '**/*.gemspec'
       - '**/*.rb'
       - '**/Gemfile'
+    problem_on_unmodified_line: ignore
 
   TrailingWhitespace:
     enabled: true
