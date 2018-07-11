@@ -40,7 +40,11 @@ module ParallelCucumber
       count = all_tests.count
 
       long_running_tests = if @options[:long_running_tests]
-                             Helper::Cucumber.selected_tests(@options[:cucumber_options], @options[:long_running_tests])
+                             narrowed_long_running_tests = [
+                               @options[:cucumber_args],
+                               @options[:long_running_tests]
+                             ].join(' ')
+                             Helper::Cucumber.selected_tests(@options[:cucumber_options], narrowed_long_running_tests)
                            else
                              []
                            end
