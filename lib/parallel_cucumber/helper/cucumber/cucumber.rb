@@ -75,14 +75,22 @@ module ParallelCucumber
         end
 
         def expand_profiles(options, env = {})
-          e = ENV.to_h
-          ENV.replace(e.merge(env))
-          begin
-            config = YAML.load(ERB.new(File.read(config_file)).result)
-            _expand_profiles(options, config)
-          ensure
-            ENV.replace(e)
+          mutex.synchronize do
+            e = ENV.to_h
+            ENV.replace(e.merge(env))
+            begin
+              content = ERB.new(File.read(config_file)).result
+              config  = YAML.safe_load(content)
+              return _expand_profiles(options, config)
+            ensure
+              ENV.replace(e)
+            end
           end
+        end
+
+        # @return Mutex
+        def mutex
+          @mutex ||= Mutex.new
         end
 
         def config_file
