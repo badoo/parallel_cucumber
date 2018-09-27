@@ -255,9 +255,9 @@ module ParallelCucumber
         @logger << "ERROR #{e} #{e.backtrace.first(5)}"
         error_file = "#{test_batch_dir}/error.json"
         on_batch_error(batch_env, batch_id, error_file, tests, e)
-        return { script_failure: 1 }
+        return tests.map { |t| [t, ::ParallelCucumber::Status::UNKNOWN] }.to_h
       end
-      parse_results(test_state)
+      parse_results(test_state, tests)
     ensure
       Helper::Command.wrap_block(@log_decoration, "file copy #{Time.now}", @logger) do
         # Copy files we might have renamed or moved
@@ -311,21 +311,21 @@ module ParallelCucumber
       @logger.update_into(@stdout_logger)
     end
 
-    def parse_results(f)
+    def parse_results(f, tests)
       unless File.file?(f)
         @logger.error("Results file does not exist: #{f}")
-        return { results_missing: 1 }
+        return tests.map { |t| [t, ::ParallelCucumber::Status::UNKNOWN] }.to_h
       end
       json_report = File.read(f)
       if json_report.empty?
         @logger.error("Results file is empty: #{f}")
-        return { results_empty: 1 }
+        return tests.map { |t| [t, ::ParallelCucumber::Status::UNKNOWN] }.to_h
       end
       Helper::Cucumber.parse_json_report(json_report)
     rescue => e
       trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
       @logger.error("Threw: JSON parse of results caused #{trace}")
-      { json_fail: 1 }
+      tests.map { |t| [t, ::ParallelCucumber::Status::UNKNOWN] }.to_h
     end
   end
 end
