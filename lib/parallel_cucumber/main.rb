@@ -76,6 +76,14 @@ module ParallelCucumber
       status_totals = {}
       total_mm, total_ss = time_it do
         results = run_parallel_workers(number_of_workers) || {}
+
+        begin
+          Hooks.fire_after_workers(results: results, queue: queue)
+        rescue StandardError => e
+          trace = e.backtrace.join("\n\t")
+          @logger.warn("There was exception in after_workers hook #{e.message} \n #{trace}")
+        end
+
         unrun = tests - results.keys
         @logger.error("Tests #{unrun.join(' ')} were not run") unless unrun.empty?
         @logger.error("Queue #{queue.name} is not empty") unless queue.empty?
