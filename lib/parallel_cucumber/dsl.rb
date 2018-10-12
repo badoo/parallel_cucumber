@@ -26,6 +26,10 @@ module ParallelCucumber
       def after_workers(&proc)
         Hooks.register_after_workers(proc)
       end
+
+      def on_batch_error(&proc)
+        Hooks.register_on_batch_error(proc)
+      end
     end
   end
 end
