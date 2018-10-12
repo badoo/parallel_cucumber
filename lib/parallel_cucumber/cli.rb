@@ -89,14 +89,6 @@ module ParallelCucumber
           options[:pre_check] = pre_check
         end
 
-        opts.on('--on-batch-error COMMAND',
-                'Command to call on any error happened while running batch of tests.
-                 It will receive as argument json file with list of tests and error happened.') do |on_batch_error|
-          options[:on_batch_error] = on_batch_error
-        end
-
-        opts.on('--no-pretty', 'Now a no-op for compatibility there is no default pretty') {}
-
         opts.on('--log-dir DIR', 'Directory for worker logfiles') do |log_dir|
           options[:log_dir] = log_dir
         end

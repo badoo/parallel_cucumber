@@ -11,9 +11,6 @@ Example: parallel_cucumber -n 4 -o "-f pretty -f html -o report.html" examples/i
         --directed-tests JSON        Direct tests to specific workers, e.g. {"0": "-t @head"}
         --test-command COMMAND       Command to run for test phase, default cucumber
         --pre-batch-check COMMAND    Command causing worker to quit on exit failure
-        --on-batch-error COMMAND     Command to call on any error happened while running batch of tests.
-                 It will receive as argument json file with list of tests and error happened.
-        --no-pretty                  Now a no-op for compatibility there is no default pretty
         --log-dir DIR                Directory for worker logfiles
         --log-decoration JSON        Block quoting for logs, e.g. {start: "#start %s", end: "#end %s"}
         --summary JSON               Summary files, e.g. {failed: "./failed.txt", unknown: "./unknown.txt"}

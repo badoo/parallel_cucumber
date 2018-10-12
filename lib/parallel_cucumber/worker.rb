@@ -33,7 +33,6 @@ module ParallelCucumber
       @cucumber_options = options[:cucumber_options]
       @test_command = options[:test_command]
       @pre_check = options[:pre_check]
-      @on_batch_error = options[:on_batch_error]
       @index = index
       @queue_connection_params = options[:queue_connection_params]
       @setup_worker = options[:setup_worker]
@@ -177,31 +176,6 @@ module ParallelCucumber
       end
     end
 
-    def on_batch_error(batch_env, batch_id, error_file, tests, error)
-      return unless @on_batch_error
-
-      begin
-        error_info = {
-          class: error.class,
-          message: error.message,
-          backtrace: error.backtrace
-        }
-        batch_error_info = {
-          batch_id: batch_id,
-          tests: tests,
-          error: error_info
-        }
-        File.write(error_file, batch_error_info.to_json)
-        command = "#{@on_batch_error} #{error_file}"
-        Helper::Command.exec_command(
-          batch_env, 'on_batch_error', command, @logger, @log_decoration, timeout: @batch_error_timeout
-        )
-      rescue => e
-        message = "on-batch-error failed: #{e.message}"
-        @logger.warn(message)
-      end
-    end
-
     def running_totals(batch_results, running_total)
       batch_info = Status.constants.map do |status|
         status = Status.const_get(status)
@@ -253,8 +227,14 @@ module ParallelCucumber
         )
       rescue => e
         @logger << "ERROR #{e} #{e.backtrace.first(5)}"
-        error_file = "#{test_batch_dir}/error.json"
-        on_batch_error(batch_env, batch_id, error_file, tests, e)
+
+        begin
+          Hooks.fire_on_batch_error(tests: tests, batch_id: batch_id, env: batch_env, exception: e)
+        rescue StandardError => exc
+          trace = exc.backtrace.join("\n\t")
+          @logger.warn("There was exception in on_batch_error hook #{exc.message} \n #{trace}")
+        end
+
         return tests.map { |t| [t, ::ParallelCucumber::Status::UNKNOWN] }.to_h
       end
       parse_results(test_state, tests)
