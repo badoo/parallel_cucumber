@@ -33,8 +33,8 @@ module ParallelCucumber
       all_tests = Helper::Cucumber.selected_tests(@options[:cucumber_options], @options[:cucumber_args])
 
       if all_tests.empty?
-        @logger.error('There are no tests to run')
-        exit(1)
+        @logger.info('There is no tests to run, exiting...')
+        exit(0)
       end
 
       count = all_tests.count
