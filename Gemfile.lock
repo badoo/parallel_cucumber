@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    parallel_cucumber (0.2.13)
+    parallel_cucumber (0.2.14)
       cucumber (~> 2)
       parallel (~> 1.12)
       redis (~> 4.0)
@@ -60,4 +60,4 @@ DEPENDENCIES
   rubocop (= 0.59.2)
 
 BUNDLED WITH
-   1.16.5
+   1.17.3
