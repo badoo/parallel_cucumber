@@ -75,6 +75,13 @@ module ParallelCucumber
 
       status_totals = {}
       total_mm, total_ss = time_it do
+        begin
+          Hooks.fire_before_workers(queue: queue)
+        rescue StandardError => e
+          trace = e.backtrace.join("\n\t")
+          @logger.warn("There was exception in before_workers hook #{e.message} \n #{trace}")
+        end
+
         results = run_parallel_workers(number_of_workers) || {}
 
         begin
