@@ -23,6 +23,10 @@ module ParallelCucumber
         Hooks.register_after_batch(proc)
       end
 
+      def before_workers(&proc)
+        Hooks.register_before_workers(proc)
+      end
+
       def after_workers(&proc)
         Hooks.register_after_workers(proc)
       end
