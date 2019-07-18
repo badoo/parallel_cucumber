@@ -52,6 +52,8 @@ module ParallelCucumber
       end
       tests = first_tests + (all_tests - first_tests).shuffle
 
+      collective_queue_size = 0
+
       @options[:directed_tests].each do |k, v|
         directed_tests = Helper::Cucumber.selected_tests(@options[:cucumber_options], v)
         if directed_tests.empty?
@@ -63,6 +65,7 @@ module ParallelCucumber
           @logger.info("Adding #{directed_tests.count} tests to queue _#{k}")
           directed_queue.enqueue(directed_tests)
           tests -= directed_tests
+          collective_queue_size += directed_queue.length
         end
       end
 
@@ -75,7 +78,8 @@ module ParallelCucumber
         @logger.warn("There was exception in before_workers hook #{e.message} \n #{trace}")
       end
 
-      number_of_workers = determine_work_and_batch_size(queue.length)
+      collective_queue_size += queue.length
+      number_of_workers = determine_work_and_batch_size(collective_queue_size)
 
       status_totals = {}
       total_mm, total_ss = time_it do
