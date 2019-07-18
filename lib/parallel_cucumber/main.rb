@@ -37,8 +37,6 @@ module ParallelCucumber
         exit(0)
       end
 
-      count = all_tests.count
-
       long_running_tests = if @options[:long_running_tests]
                              narrowed_long_running_tests = [
                                @options[:cucumber_args],
@@ -70,18 +68,17 @@ module ParallelCucumber
 
       @logger.info("Adding #{tests.count} tests to Queue")
       queue.enqueue(tests) unless tests.empty?
+      begin
+        Hooks.fire_before_workers(queue: queue)
+      rescue StandardError => e
+        trace = e.backtrace.join("\n\t")
+        @logger.warn("There was exception in before_workers hook #{e.message} \n #{trace}")
+      end
 
-      number_of_workers = determine_work_and_batch_size(count)
+      number_of_workers = determine_work_and_batch_size(queue.length)
 
       status_totals = {}
       total_mm, total_ss = time_it do
-        begin
-          Hooks.fire_before_workers(queue: queue)
-        rescue StandardError => e
-          trace = e.backtrace.join("\n\t")
-          @logger.warn("There was exception in before_workers hook #{e.message} \n #{trace}")
-        end
-
         results = run_parallel_workers(number_of_workers) || {}
 
         begin
