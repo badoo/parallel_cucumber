@@ -37,8 +37,6 @@ module ParallelCucumber
         exit(0)
       end
 
-      count = all_tests.count
-
       long_running_tests = if @options[:long_running_tests]
                              narrowed_long_running_tests = [
                                @options[:cucumber_args],
@@ -54,6 +52,8 @@ module ParallelCucumber
       end
       tests = first_tests + (all_tests - first_tests).shuffle
 
+      collective_queue_size = 0
+
       @options[:directed_tests].each do |k, v|
         directed_tests = Helper::Cucumber.selected_tests(@options[:cucumber_options], v)
         if directed_tests.empty?
@@ -65,23 +65,24 @@ module ParallelCucumber
           @logger.info("Adding #{directed_tests.count} tests to queue _#{k}")
           directed_queue.enqueue(directed_tests)
           tests -= directed_tests
+          collective_queue_size += directed_queue.length
         end
       end
 
       @logger.info("Adding #{tests.count} tests to Queue")
       queue.enqueue(tests) unless tests.empty?
+      begin
+        Hooks.fire_before_workers(queue: queue)
+      rescue StandardError => e
+        trace = e.backtrace.join("\n\t")
+        @logger.warn("There was exception in before_workers hook #{e.message} \n #{trace}")
+      end
 
-      number_of_workers = determine_work_and_batch_size(count)
+      collective_queue_size += queue.length
+      number_of_workers = determine_work_and_batch_size(collective_queue_size)
 
       status_totals = {}
       total_mm, total_ss = time_it do
-        begin
-          Hooks.fire_before_workers(queue: queue)
-        rescue StandardError => e
-          trace = e.backtrace.join("\n\t")
-          @logger.warn("There was exception in before_workers hook #{e.message} \n #{trace}")
-        end
-
         results = run_parallel_workers(number_of_workers) || {}
 
         begin
