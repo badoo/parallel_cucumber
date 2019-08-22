@@ -149,17 +149,11 @@ module ParallelCucumber
       Helper::Command.wrap_block(@options[:log_decoration],
                                  @options[:log_decoration]['worker_block'] || 'workers',
                                  @logger) do
-        remaining = (0...number_of_workers).to_a
-        map = Parallel.map(
-          remaining.dup,
-          in_threads: number_of_workers,
-          finish: -> (_, ix, _) { @logger.synch { |l| l.info("Finished: #{ix} remaining: #{remaining -= [ix]}") } }
-        ) do |index|
-          ParallelCucumber::Worker
-            .new(@options, index, @logger)
-            .start(env_for_worker(@options[:env_variables], index))
-        end
-        map.inject(:merge) # Returns hash of file:line to statuses + :worker-index to summary.
+
+        worker_manager =  ParallelCucumber::WorkerManager.new(@options, @logger)
+        worker_manager.start(number_of_workers)
+      ensure
+        worker_manager.kill unless worker_manager.finished?
       end
     end
 
@@ -169,11 +163,11 @@ module ParallelCucumber
         @logger.info("Inferred worker count #{@options[:n]} from env_variables option")
       end
 
-      number_of_workers = [@options[:n], count].min
+      number_of_workers = [@options[:n], [@options[:backup_worker_count], count].max].min
       unless number_of_workers == @options[:n]
         @logger.info(<<-LOG)
           Number of workers was overridden to #{number_of_workers}.
-          More workers (#{@options[:n]}) requested than tests (#{count})".
+          More workers (#{@options[:n]}) requested than tests (#{count}). BackupWorkerCount: #{@options[:backup_worker_count]}".
         LOG
       end
 
@@ -191,31 +185,6 @@ module ParallelCucumber
         LOG
       end
       number_of_workers
-    end
-
-    private
-
-    def env_for_worker(env_variables, worker_number)
-      env = env_variables.map do |k, v|
-        case v
-        when String, Numeric, TrueClass, FalseClass
-          [k, v]
-        when Array
-          [k, v[worker_number]]
-        when Hash
-          value = v[worker_number.to_s]
-          [k, value] unless value.nil?
-        when NilClass
-        else
-          raise("Don't know how to set '#{v}'<#{v.class}> to the environment variable '#{k}'")
-        end
-      end.compact.to_h
-
-      # Defaults, if absent in env. Shame 'merge' isn't something non-commutative like 'adopts/defaults'.
-      env = { TEST: 1, TEST_PROCESS_NUMBER: worker_number, WORKER_INDEX: worker_number }.merge(env)
-
-      # Overwrite this if it exists in env.
-      env.merge(PARALLEL_CUCUMBER_EXPORTS: env.keys.join(',')).map { |k, v| [k.to_s, v.to_s] }.to_h
     end
   end
 end

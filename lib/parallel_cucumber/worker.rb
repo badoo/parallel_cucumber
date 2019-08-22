@@ -3,28 +3,10 @@ require 'timeout'
 require 'tmpdir' # I loathe Ruby.
 
 module ParallelCucumber
-  class Tracker
-    def initialize(queue)
-      @queue = queue
-    end
-
-    def status
-      queue_length = @queue.length
-      now = Time.now
-      @full ||= queue_length
-      @start ||= now
-      completed = @full - queue_length
-      elapsed = now - @start
-      estimate = (completed == 0) ? '' : " #{(elapsed * @full / completed).to_i}s est"
-      "#{queue_length}/#{@full} left #{elapsed.to_i}s worker#{estimate}"
-    end
-  end
-
   class Worker
     include ParallelCucumber::Helper::Utils
 
-    def initialize(options, index, stdout_logger)
-      @batch_size = options[:batch_size]
+    def initialize(options:, index:, stdout_logger:, manager:)
       @group_by = options[:group_by]
       @batch_timeout = options[:batch_timeout]
       @batch_error_timeout = options[:batch_error_timeout]
@@ -34,7 +16,7 @@ module ParallelCucumber
       @test_command = options[:test_command]
       @pre_check = options[:pre_check]
       @index = index
-      @queue_connection_params = options[:queue_connection_params]
+      @name = "W#{@index}"
       @setup_worker = options[:setup_worker]
       @teardown_worker = options[:teardown_worker]
       @worker_delay = options[:worker_delay]
@@ -43,6 +25,19 @@ module ParallelCucumber
       @log_dir = options[:log_dir]
       @log_file = "#{@log_dir}/worker_#{index}.log"
       @stdout_logger = stdout_logger # .sync writes only.
+      @is_busy_running_test = false
+      @jobs_queue = Queue.new
+      @manager = manager
+    end
+
+    attr_reader :index
+
+    def assign_job(instruction)
+      @jobs_queue.enq(instruction)
+    end
+
+    def busy_running_test?
+      @is_busy_running_test && @current_thread.alive?
     end
 
     def autoshutting_file
@@ -68,6 +63,9 @@ module ParallelCucumber
     end
 
     def start(env)
+      @current_thread = Thread.current
+      @manager.inform_idle(@name)
+
       env = env.dup.merge!('WORKER_LOG' => @log_file)
 
       File.delete(@log_file) if File.exist?(@log_file)
@@ -96,33 +94,31 @@ module ParallelCucumber
         begin
           setup(env)
 
-          queue = ParallelCucumber::Helper::Queue.new(@queue_connection_params)
-          directed_queue = ParallelCucumber::Helper::Queue.new(@queue_connection_params, "_#{@index}")
-          queue_tracker = Tracker.new(queue)
-
           loop_mm, loop_ss = time_it do
             loop do
-              break if queue.empty? && directed_queue.empty?
-              batch = []
-              precmd = precheck(env)
-              if (m = precmd.match(/precmd:retry-after-(\d+)-seconds/))
-                sleep(1 + m[1].to_i)
-                next
+              job = @jobs_queue.pop(false)
+              case job.type
+              when Job::PRECHECK
+                precmd = precheck(env)
+                if (m = precmd.match(/precmd:retry-after-(\d+)-seconds/))
+                  @manager.inform_idle(@name)
+                  sleep(1 + m[1].to_i)
+                  next
+                end
+                @manager.inform_healthy(@name)
+              when Job::RUN_TESTS
+                run_batch(env, results, running_total, job.details)
+                @manager.inform_idle(@name)
+              when Job::DIE
+                break
+              else
+                raise("Invalid job #{job.inspect}")
               end
-              @batch_size.times do
-                # TODO: Handle recovery of possibly toxic dequeued undirected tests if a worker dies mid-processing.
-                batch << (directed_queue.empty? ? queue : directed_queue).dequeue
-              end
-              batch.compact!
-              batch.sort! # Workaround for https://github.com/cucumber/cucumber-ruby/issues/952
-              break if batch.empty?
-
-              run_batch(env, queue_tracker, results, running_total, batch)
             end
           end
           @logger.debug("Loop took #{loop_mm} minutes #{loop_ss} seconds")
           @logger.update_into(@stdout_logger)
-        rescue => e
+        rescue StandardError => e
           trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
           @logger.error("Threw: #{e.inspect} #{trace}")
         ensure
@@ -135,10 +131,10 @@ module ParallelCucumber
       results
     end
 
-    def run_batch(env, queue_tracker, results, running_total, tests)
+    def run_batch(env, results, running_total, tests)
+      @is_busy_running_test = true
       batch_id = "#{Time.now.to_i}-#{@index}"
       @logger.debug("Batch ID is #{batch_id}")
-      @logger.info("Took #{tests.count} from the queue (#{queue_tracker.status}): #{tests.join(' ')}")
 
       batch_mm, batch_ss = time_it do
         begin
@@ -158,6 +154,7 @@ module ParallelCucumber
         process_results(batch_results, tests)
         running_totals(batch_results, running_total)
         results.merge!(batch_results)
+        @is_busy_running_test = false
       end
     ensure
       @logger.debug("Batch #{batch_id} took #{batch_mm} minutes #{batch_ss} seconds")
