@@ -1,8 +1,8 @@
 module ParallelCucumber
   class Job
-    RUN_TESTS = 'run_tests'.freeze
-    PRECHECK = 'precheck'.freeze
-    DIE = 'die'.freeze
+    RUN_TESTS = :run_tests
+    PRECHECK  = :precheck
+    DIE       = :die
 
     attr_accessor :type, :details
     def initialize(type, details = nil)

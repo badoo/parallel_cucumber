@@ -22,45 +22,6 @@ module ParallelCucumber
       start_workers
     end
 
-    def create_workers(number_of_workers)
-      number_of_workers.times do |index|
-        @workers["W#{index}"] =
-          ParallelCucumber::Worker.new(options: @options, index: index, stdout_logger: @logger, manager: self)
-      end
-    end
-
-    def start_managing
-      @current_thread = Thread.start do
-        loop do
-          if !@backlog.empty?
-            pre_check_unchecked_workers
-            give_job_to_healthy_worker
-          elsif any_worker_busy?
-            kill_needless_workers
-            sleep 0.5
-          else
-            kill_all_workers
-            break
-          end
-        end
-        @finished = true
-      end
-    end
-
-    def start_workers
-      indices = (0...@workers.size).to_a
-      @results = Parallel.map(indices.dup, in_threads: @workers.size,
-                                           finish: ->(_, ix, _) { @logger.synch { |l| l.info("Finished: #{ix} remaining: #{indices -= [ix]}") } }) do |index|
-        puts "Starting W#{index}"
-        @workers["W#{index}"].start(env_for_worker(@options[:env_variables], index))
-      end
-      @results.inject(:merge) # Returns hash of file:line to statuses + :worker-index to summary.
-    end
-
-    def finished?
-      @finished
-    end
-
     def kill
       @current_thread.kill
     end
@@ -75,11 +36,45 @@ module ParallelCucumber
 
     private
 
+    def create_workers(number_of_workers)
+      number_of_workers.times do |index|
+        @workers["W#{index}"] =
+            ParallelCucumber::Worker.new(options: @options, index: index, stdout_logger: @logger, manager: self)
+      end
+    end
+
+    def start_managing
+      @current_thread = Thread.start do
+        loop do
+          if !@backlog.empty?
+            pre_check_unchecked_workers
+            give_job_to_healthy_worker
+          elsif any_worker_busy?
+            kill_surplus_workers
+            sleep 0.5
+          else
+            kill_all_workers
+            break
+          end
+        end
+      end
+    end
+
+    def start_workers
+      indices = (0...@workers.size).to_a
+      @results = Parallel.map(indices.dup, in_threads: @workers.size,
+                              finish: ->(_, ix, _) { @logger.synch { |l| l.info("Finished: #{ix} remaining: #{indices -= [ix]}") } }) do |index|
+        puts "Starting W#{index}"
+        @workers["W#{index}"].start(env_for_worker(@options[:env_variables], index))
+      end
+      @results.inject(:merge) # Returns hash of file:line to statuses + :worker-index to summary.
+    end
+
     def kill_all_workers
       @workers.values.each { |w| w.assign_job(Job.new(Job::DIE)) }
     end
 
-    def kill_needless_workers
+    def kill_surplus_workers
       until (@unchecked_workers.size + @healthy_workers.size) <= @back_up_worker_size
         queue = !@unchecked_workers.empty? ? @unchecked_workers : @healthy_workers
         worker = queue.pop(true)

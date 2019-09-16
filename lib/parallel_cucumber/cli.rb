@@ -20,7 +20,7 @@ module ParallelCucumber
       queue_connection_params: ['redis://127.0.0.1:6379', DateTime.now.strftime('queue-%Y%m%d%H%M%S')],
       worker_delay: 0,
       test_command: 'cucumber',
-      backup_worker_count: 1
+      backup_worker_count: 0
     }.freeze
 
     def initialize(argv)

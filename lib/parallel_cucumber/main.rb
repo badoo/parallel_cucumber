@@ -153,7 +153,7 @@ module ParallelCucumber
         worker_manager =  ParallelCucumber::WorkerManager.new(@options, @logger)
         worker_manager.start(number_of_workers)
       ensure
-        worker_manager.kill unless worker_manager.finished?
+        worker_manager.kill
       end
     end
 
