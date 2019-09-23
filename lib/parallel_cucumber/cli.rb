@@ -19,7 +19,8 @@ module ParallelCucumber
       n: 0, # Default: computed from longest list in json parameters, minimum 1.
       queue_connection_params: ['redis://127.0.0.1:6379', DateTime.now.strftime('queue-%Y%m%d%H%M%S')],
       worker_delay: 0,
-      test_command: 'cucumber'
+      test_command: 'cucumber',
+      backup_worker_count: 0
     }.freeze
 
     def initialize(argv)
@@ -59,6 +60,10 @@ module ParallelCucumber
             exit 1
           end
           options[:n] = n
+        end
+
+        opts.on('--backup-worker-count BACKUP_WORKERS', Integer, 'How many free workers to hold before all tasks are done. Default is none') do |n|
+          options[:backup_worker_count] = n
         end
 
         opts.on('-o', '--cucumber-options "OPTIONS"', 'Run cucumber with these options') do |cucumber_options|
