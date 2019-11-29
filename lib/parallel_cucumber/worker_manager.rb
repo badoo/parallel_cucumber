@@ -51,11 +51,11 @@ module ParallelCucumber
             give_job_to_healthy_worker
           elsif any_worker_busy?
             kill_surplus_workers
-            sleep 0.5
           else
             kill_all_workers
             break
           end
+          sleep 0.5
         end
       end
     end
@@ -71,6 +71,7 @@ module ParallelCucumber
     end
 
     def kill_all_workers
+      @logger.info("=== Killing All Workers")
       @workers.values.each { |w| w.assign_job(Job.new(Job::DIE)) }
     end
 
