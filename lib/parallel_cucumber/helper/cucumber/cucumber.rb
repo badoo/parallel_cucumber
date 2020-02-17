@@ -26,8 +26,8 @@ module ParallelCucumber
 
         def parse_json_report(json_report)
           report = JSON.parse(json_report, symbolize_names: true)
-          report.map do |scenario, cucumber_status|
-            status = case cucumber_status
+          report.each do |scenario, details|
+            status = case details[:status]
                        when 'failed'
                          Status::FAILED
                        when 'passed'
@@ -43,8 +43,9 @@ module ParallelCucumber
                        else
                          Status::UNKNOWN
                      end
-            [scenario, status]
-          end.to_h
+            report[scenario][:status] = status
+          end
+          report
         end
 
         private

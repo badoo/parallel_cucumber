@@ -67,7 +67,11 @@ module ParallelCucumber
         puts "Starting W#{index}"
         @workers["W#{index}"].start(env_for_worker(@options[:env_variables], index))
       end
-      @results.inject(:merge) # Returns hash of file:line to statuses + :worker-index to summary.
+      @results.inject do |seed, result|
+        seed.merge(result){|_key, oldval, newval|
+          (newval[:finish_time] > oldval[:finish_time]) ? newval : oldval
+        }
+      end
     end
 
     def kill_all_workers

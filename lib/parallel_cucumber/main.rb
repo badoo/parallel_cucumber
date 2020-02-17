@@ -98,7 +98,7 @@ module ParallelCucumber
 
         status_totals = Status.constants.map do |status|
           status = Status.const_get(status)
-          tests_with_status = results.select { |_t, s| s == status }.keys
+          tests_with_status = results.select { |_t, s| s[:status] == status }.keys
           [status, tests_with_status]
         end.to_h
 

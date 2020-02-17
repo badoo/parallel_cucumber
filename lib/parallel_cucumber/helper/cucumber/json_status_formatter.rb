@@ -15,7 +15,13 @@ module ParallelCucumber
         end
 
         def on_after_test_case(event)
-          @result[event.test_case.location.to_s] = event.result.to_sym
+          details = {status: event.result.to_sym}
+          if event.result.respond_to?(:exception)
+            details[:exception_classname] = event.result.exception.class
+            details[:exception_message] = event.result.exception.message
+          end
+          details[:finish_time] = Time.now.to_i
+          @result[event.test_case.location.to_s] = details
         end
 
         def on_finished_testing(*)
