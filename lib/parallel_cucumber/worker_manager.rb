@@ -39,7 +39,7 @@ module ParallelCucumber
     def create_workers(number_of_workers)
       number_of_workers.times do |index|
         @workers["W#{index}"] =
-            ParallelCucumber::Worker.new(options: @options, index: index, stdout_logger: @logger, manager: self)
+          ParallelCucumber::Worker.new(options: @options, index: index, stdout_logger: @logger, manager: self)
       end
     end
 
@@ -63,19 +63,19 @@ module ParallelCucumber
     def start_workers
       indices = (0...@workers.size).to_a
       @results = Parallel.map(indices.dup, in_threads: @workers.size,
-                              finish: ->(_, ix, _) { @logger.synch { |l| l.info("Finished: #{ix} remaining: #{indices -= [ix]}") } }) do |index|
+                                           finish: ->(_, ix, _) { @logger.synch { |l| l.info("Finished: #{ix} remaining: #{indices -= [ix]}") } }) do |index|
         puts "Starting W#{index}"
         @workers["W#{index}"].start(env_for_worker(@options[:env_variables], index))
       end
       @results.inject do |seed, result|
-        seed.merge(result){|_key, oldval, newval|
+        seed.merge(result) do |_key, oldval, newval|
           (newval[:finish_time] > oldval[:finish_time]) ? newval : oldval
-        }
+        end
       end
     end
 
     def kill_all_workers
-      @logger.info("=== Killing All Workers")
+      @logger.info('=== Killing All Workers')
       @workers.values.each { |w| w.assign_job(Job.new(Job::DIE)) }
     end
 

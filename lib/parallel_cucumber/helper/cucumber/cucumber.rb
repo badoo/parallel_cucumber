@@ -27,23 +27,22 @@ module ParallelCucumber
         def parse_json_report(json_report)
           report = JSON.parse(json_report, symbolize_names: true)
           report.each do |scenario, details|
-            status = case details[:status]
-                       when 'failed'
-                         Status::FAILED
-                       when 'passed'
-                         Status::PASSED
-                       when 'pending'
-                         Status::PENDING
-                       when 'skipped'
-                         Status::SKIPPED
-                       when 'undefined'
-                         Status::UNDEFINED
-                       when 'unknown'
-                         Status::UNKNOWN
-                       else
-                         Status::UNKNOWN
-                     end
-            report[scenario][:status] = status
+            report[scenario][:status] = case details[:status]
+                                        when 'failed'
+                                          Status::FAILED
+                                        when 'passed'
+                                          Status::PASSED
+                                        when 'pending'
+                                          Status::PENDING
+                                        when 'skipped'
+                                          Status::SKIPPED
+                                        when 'undefined'
+                                          Status::UNDEFINED
+                                        when 'unknown'
+                                          Status::UNKNOWN
+                                        else
+                                          Status::UNKNOWN
+                                        end
           end
           report
         end
@@ -58,7 +57,7 @@ module ParallelCucumber
           options = remove_strict_flag(options)
           content = nil
 
-          Tempfile.open(%w(dry-run .json)) do |f|
+          Tempfile.open(%w[dry-run .json]) do |f|
             dry_run_options = "--dry-run --format ParallelCucumber::Helper::Cucumber::JsonStatusFormatter --out #{f.path}"
 
             cmd = "cucumber #{options} #{dry_run_options} #{args_string}"
