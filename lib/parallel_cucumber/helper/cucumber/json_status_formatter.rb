@@ -17,7 +17,7 @@ module ParallelCucumber
         def on_after_test_case(event)
           details = {status: event.result.to_sym}
           if event.result.respond_to?(:exception)
-            details[:exception_classname] = event.result.exception.class
+            details[:exception_classname] = event.result.exception.class.to_s
             details[:exception_message] = event.result.exception.message
           end
           details[:finish_time] = Time.now.to_i
