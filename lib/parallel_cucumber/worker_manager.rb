@@ -63,7 +63,7 @@ module ParallelCucumber
     def start_workers
       indices = (0...@workers.size).to_a
       @results = Parallel.map(indices.dup, in_threads: @workers.size,
-                                           finish: ->(_, ix, _) { @logger.synch { |l| l.info("Finished: #{ix} remaining: #{indices -= [ix]}") } }) do |index|
+                              finish: ->(_, ix, _) { @logger.synch { |l| l.info("Finished: #{ix} remaining: #{indices -= [ix]}") } }) do |index|
         puts "Starting W#{index}"
         @workers["W#{index}"].start(env_for_worker(@options[:env_variables], index))
       end
