@@ -39,7 +39,7 @@ module ParallelCucumber
     def create_workers(number_of_workers)
       number_of_workers.times do |index|
         @workers["W#{index}"] =
-            ParallelCucumber::Worker.new(options: @options, index: index, stdout_logger: @logger, manager: self)
+          ParallelCucumber::Worker.new(options: @options, index: index, stdout_logger: @logger, manager: self)
       end
     end
 
@@ -67,11 +67,15 @@ module ParallelCucumber
         puts "Starting W#{index}"
         @workers["W#{index}"].start(env_for_worker(@options[:env_variables], index))
       end
-      @results.inject(:merge) # Returns hash of file:line to statuses + :worker-index to summary.
+      @results.inject do |seed, result|
+        seed.merge(result) do |_key, oldval, newval|
+          (newval[:finish_time] > oldval[:finish_time]) ? newval : oldval
+        end
+      end
     end
 
     def kill_all_workers
-      @logger.info("=== Killing All Workers")
+      @logger.info('=== Killing All Workers')
       @workers.values.each { |w| w.assign_job(Job.new(Job::DIE)) }
     end
 
