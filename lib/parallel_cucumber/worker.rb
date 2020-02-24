@@ -176,7 +176,7 @@ module ParallelCucumber
     def running_totals(batch_results, running_total)
       batch_info = Status.constants.map do |status|
         status = Status.const_get(status)
-        [status, batch_results.select { |_t, s| s == status }.keys]
+        [status, batch_results.select { |_t, s| s[:status] == status }.keys]
       end.to_h
       batch_info.each do |s, tt|
         @logger.info("#{s.to_s.upcase} #{tt.count} tests: #{tt.join(' ')}") unless tt.empty?
@@ -191,7 +191,7 @@ module ParallelCucumber
       test_syms = tests.map(&:to_sym)
       unrun = test_syms - batch_keys
       surfeit = batch_keys - test_syms
-      unrun.each { |test| batch_results[test] = Status::UNKNOWN }
+      unrun.each { |test| batch_results[test][:status] = Status::UNKNOWN }
       surfeit.each { |test| batch_results.delete(test) }
       @logger.error("Did not run #{unrun.count}/#{tests.count}: #{unrun.join(' ')}") unless unrun.empty?
       @logger.error("Extraneous runs (#{surfeit.count}): #{surfeit.join(' ')}") unless surfeit.empty?
