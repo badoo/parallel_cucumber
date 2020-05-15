@@ -47,6 +47,13 @@ module ParallelCucumber
           report
         end
 
+        def unknown_result(tests)
+          res = tests.map do |test|
+            [test.to_sym, {status: ::ParallelCucumber::Status::UNKNOWN}]
+          end
+          res.to_h
+        end
+
         private
 
         def dry_run_report(options, args_string)

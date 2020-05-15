@@ -232,7 +232,7 @@ module ParallelCucumber
           @logger.warn("There was exception in on_batch_error hook #{exc.message} \n #{trace}")
         end
 
-        return tests.map { |t| [t, ::ParallelCucumber::Status::UNKNOWN] }.to_h
+        return Helper::Cucumber.unknown_result(tests)
       end
       parse_results(test_state, tests)
     ensure
@@ -291,18 +291,18 @@ module ParallelCucumber
     def parse_results(f, tests)
       unless File.file?(f)
         @logger.error("Results file does not exist: #{f}")
-        return tests.map { |t| [t, ::ParallelCucumber::Status::UNKNOWN] }.to_h
+        return Helper::Cucumber.unknown_result(tests)
       end
       json_report = File.read(f)
       if json_report.empty?
         @logger.error("Results file is empty: #{f}")
-        return tests.map { |t| [t, ::ParallelCucumber::Status::UNKNOWN] }.to_h
+        return Helper::Cucumber.unknown_result(tests)
       end
       Helper::Cucumber.parse_json_report(json_report)
     rescue => e
       trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
       @logger.error("Threw: JSON parse of results caused #{trace}")
-      tests.map { |t| [t, ::ParallelCucumber::Status::UNKNOWN] }.to_h
+      Helper::Cucumber.unknown_result(tests)
     end
   end
 end
