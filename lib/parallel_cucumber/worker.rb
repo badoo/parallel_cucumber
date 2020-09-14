@@ -10,11 +10,9 @@ module ParallelCucumber
       @group_by = options[:group_by]
       @batch_timeout = options[:batch_timeout]
       @batch_error_timeout = options[:batch_error_timeout]
-      @precheck_timeout = options[:precheck_timeout]
       @setup_timeout = options[:setup_timeout]
       @cucumber_options = options[:cucumber_options]
       @test_command = options[:test_command]
-      @pre_check = options[:pre_check]
       @index = index
       @name = "W#{@index}"
       @setup_worker = options[:setup_worker]
@@ -99,12 +97,7 @@ module ParallelCucumber
               job = @jobs_queue.pop(false)
               case job.type
               when Job::PRECHECK
-                precmd = precheck(env)
-                if (m = precmd.match(/precmd:retry-after-(\d+)-seconds/))
-                  @manager.inform_idle(@name)
-                  sleep(1 + m[1].to_i)
-                  next
-                end
+                Hooks.fire_worker_health_check(env)
                 @manager.inform_healthy(@name)
               when Job::RUN_TESTS
                 run_batch(env, results, running_total, job.details)
@@ -159,18 +152,6 @@ module ParallelCucumber
     ensure
       @logger.debug("Batch #{batch_id} took #{batch_mm} minutes #{batch_ss} seconds")
       @logger.update_into(@stdout_logger)
-    end
-
-    def precheck(env)
-      return 'default no-op pre_check' unless @pre_check
-      begin
-        return Helper::Command.exec_command(
-          env, 'precheck', @pre_check, @logger, @log_decoration, timeout: @precheck_timeout, capture: true
-        )
-      rescue
-        @logger.error('Pre-check failed: quitting immediately')
-        raise 'Pre-check failed: quitting immediately'
-      end
     end
 
     def running_totals(batch_results, running_total)
