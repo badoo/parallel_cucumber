@@ -8,7 +8,6 @@ module ParallelCucumber
       batch_size: 1,
       batch_timeout: 600,
       setup_timeout: 30,
-      precheck_timeout: 30,
       batch_error_timeout: 30,
       cucumber_options: '',
       debug: false,
@@ -90,10 +89,6 @@ module ParallelCucumber
           options[:test_command] = test_command
         end
 
-        opts.on('--pre-batch-check COMMAND', 'Command causing worker to quit on exit failure') do |pre_check|
-          options[:pre_check] = pre_check
-        end
-
         opts.on('--log-dir DIR', 'Directory for worker logfiles') do |log_dir|
           options[:log_dir] = log_dir
         end
@@ -171,13 +166,6 @@ module ParallelCucumber
         TEXT
         opts.on('--batch-timeout SECONDS', Float, help_message) do |batch_timeout|
           options[:batch_timeout] = batch_timeout
-        end
-
-        help_message = <<-TEXT.gsub(/\s+/, ' ').strip
-          Timeout for each test precheck. Default is #{DEFAULTS[:batch_timeout]}
-        TEXT
-        opts.on('--precheck-timeout SECONDS', Float, help_message) do |timeout|
-          options[:precheck_timeout] = timeout
         end
 
         help_message = <<-TEXT.gsub(/\s+/, ' ').strip
