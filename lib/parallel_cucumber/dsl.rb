@@ -23,6 +23,10 @@ module ParallelCucumber
         Hooks.register_after_batch(proc)
       end
 
+      def worker_health_check(&proc)
+        Hooks.register_worker_health_check(proc)
+      end
+
       def before_workers(&proc)
         Hooks.register_before_workers(proc)
       end
