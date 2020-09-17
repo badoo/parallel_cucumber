@@ -1,12 +1,18 @@
 module ParallelCucumber
   class Hooks
-    @before_batch_hooks ||= []
-    @after_batch_hooks  ||= []
-    @before_workers     ||= []
-    @after_workers      ||= []
-    @on_batch_error     ||= []
+    @worker_health_check ||= []
+    @before_batch_hooks  ||= []
+    @after_batch_hooks   ||= []
+    @before_workers      ||= []
+    @after_workers       ||= []
+    @on_batch_error      ||= []
 
     class << self
+      def register_worker_health_check(proc)
+        raise(ArgumentError, 'Please provide a valid callback') unless proc.respond_to?(:call)
+        @worker_health_check << proc
+      end
+
       def register_before_batch(proc)
         raise(ArgumentError, 'Please provide a valid callback') unless proc.respond_to?(:call)
         @before_batch_hooks << proc
@@ -30,6 +36,12 @@ module ParallelCucumber
       def register_on_batch_error(proc)
         raise(ArgumentError, 'Please provide a valid callback') unless proc.respond_to?(:call)
         @on_batch_error << proc
+      end
+
+      def fire_worker_health_check(*args)
+        @worker_health_check.each do |hook|
+          hook.call(*args)
+        end
       end
 
       def fire_before_batch_hooks(*args)
