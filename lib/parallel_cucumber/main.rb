@@ -30,8 +30,12 @@ module ParallelCucumber
         exit(1)
       end
 
-      all_tests = Helper::Cucumber.selected_tests(@options[:cucumber_options], @options[:cucumber_args])
-
+      begin
+        all_tests = Helper::Cucumber.selected_tests(@options[:cucumber_options], @options[:cucumber_args])
+      rescue StandardError => error
+        Hooks.fire_on_dry_run_error(error)
+        raise error
+      end
       if all_tests.empty?
         @logger.info('There is no tests to run, exiting...')
         exit(0)
