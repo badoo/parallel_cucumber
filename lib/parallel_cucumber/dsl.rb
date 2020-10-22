@@ -38,6 +38,10 @@ module ParallelCucumber
       def on_batch_error(&proc)
         Hooks.register_on_batch_error(proc)
       end
+
+      def on_dry_run_error(&proc)
+        Hooks.register_on_dry_run_error(proc)
+      end
     end
   end
 end

@@ -6,6 +6,7 @@ module ParallelCucumber
     @before_workers      ||= []
     @after_workers       ||= []
     @on_batch_error      ||= []
+    @on_dry_run_error    ||= []
 
     class << self
       def register_worker_health_check(proc)
@@ -36,6 +37,11 @@ module ParallelCucumber
       def register_on_batch_error(proc)
         raise(ArgumentError, 'Please provide a valid callback') unless proc.respond_to?(:call)
         @on_batch_error << proc
+      end
+
+      def register_on_dry_run_error(proc)
+        raise(ArgumentError, 'Please provide a valid callback') unless proc.respond_to?(:call)
+        @on_dry_run_error << proc
       end
 
       def fire_worker_health_check(*args)
@@ -71,6 +77,12 @@ module ParallelCucumber
       def fire_on_batch_error(*args)
         @on_batch_error.each do |hook|
           hook.call(*args)
+        end
+      end
+
+      def fire_on_dry_run_error(error)
+        @on_dry_run_error.each do |hook|
+          hook.call(error)
         end
       end
     end
