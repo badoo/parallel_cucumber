@@ -28,42 +28,42 @@ module ParallelCucumber
           full_script = "#{script} 2>&1"
           env_string = env.map { |k, v| "#{k}=#{v}" }.sort.join(' ')
           logger << "== Running command `#{full_script}` at #{Time.now}\n== with environment variables: #{env_string}\n"
-          pstat = nil
+          wait_thread = nil
           pout = nil
           capture &&= [''] # Pass by reference
           exception = nil
 
           begin
             completed = begin
-              pin, pout, pstat = Open3.popen2e(env, full_script)
-              logger << "Command has pid #{pstat[:pid]}\n"
+              pin, pout, wait_thread = Open3.popen2e(env, full_script)
+              logger << "Command has pid #{wait_thread[:pid]}\n"
               pin.close
               out_reader = Thread.new do
-                output_reader(pout, pstat, logger, capture)
+                output_reader(pout, wait_thread, logger, capture)
               end
 
               unless out_reader.join(timeout)
                 raise TimedOutError
               end
 
-              graceful_process_shutdown(out_reader, pstat, pout, logger)
+              graceful_process_shutdown(out_reader, wait_thread, pout, logger)
 
-              pstat.value # reap already-terminated child.
-              "Command completed #{pstat.value} at #{Time.now}"
+              wait_thread.value # reap already-terminated child.
+              "Command completed #{wait_thread.value} at #{Time.now}"
             end
 
             logger << "#{completed}\n"
 
-            raise "Script returned #{pstat.value.exitstatus}" unless pstat.value.success? || return_script_error
+            raise "Script returned #{wait_thread.value.exitstatus}" unless wait_thread.value.success? || return_script_error
 
             capture_or_empty = capture ? capture.first : '' # Even '' is truthy
-            return pstat.value.success? ? capture_or_empty : nil
+            return wait_thread.value.success? ? capture_or_empty : nil
           rescue TimedOutError => e
-            force_kill_process_with_tree(out_reader, pstat, pout, full_script, logger, timeout)
+            force_kill_process_with_tree(out_reader, wait_thread, pout, full_script, logger, timeout)
 
             exception = e
           rescue => e
-            logger.debug("Exception #{pstat ? pstat[:pid] : "pstat=#{pstat}=nil"}")
+            logger.debug("Exception #{wait_thread ? wait_thread[:pid] : "wait_thread=#{wait_thread}=nil"}")
             trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
             logger.error("Threw for #{full_script}, caused #{trace}")
 
@@ -87,13 +87,13 @@ module ParallelCucumber
 
         private
 
-        def output_reader(pout, pstat, logger, capture)
+        def output_reader(pout, wait_thread, logger, capture)
           out_string = ''
 
           loop do
             io_select = IO.select([pout], [], [], ONE_SECOND)
-            unless io_select || pstat.alive?
-              logger << "\n== Terminating because io_select=#{io_select} when pstat.alive?=#{pstat.alive?}\n"
+            unless io_select || wait_thread.alive?
+              logger << "\n== Terminating because io_select=#{io_select} when wait_thread.alive?=#{wait_thread.alive?}\n"
               break
             end
             next unless io_select
@@ -103,44 +103,44 @@ module ParallelCucumber
             out_string = log_until_incomplete_line(logger, out_string + partial)
           end
         rescue EOFError
-          logger << "\n== EOF is normal exit, #{pstat.inspect}\n"
+          logger << "\n== EOF is normal exit, #{wait_thread.inspect}\n"
         rescue => e
           logger << "\n== Exception in out_reader due to #{e.inspect} #{e.backtrace}\n"
         ensure
           logger << out_string
           logger << ["\n== Left out_reader at #{Time.now}; ",
-                     "pipe=#{pstat.status}+#{pstat.status ? '≤no value≥' : pstat.value}\n"].join
+                     "pipe=#{wait_thread.status}+#{wait_thread.status ? '≤no value≥' : wait_thread.value}\n"].join
         end
 
-        def graceful_process_shutdown(out_reader, pstat, pout, logger)
-          out_reader.value # Should terminate with pstat
+        def graceful_process_shutdown(out_reader, wait_thread, pout, logger)
+          out_reader.value # Should terminate with wait_thread
           pout.close
-          if pstat.status
-            logger << "== Thread #{pstat.inspect} is not dead"
+          if wait_thread.status
+            logger << "== Thread #{wait_thread.inspect} is not dead"
 
-            if pstat.join(3)
-              logger << "== Thread #{pstat.inspect} joined late"
+            if wait_thread.join(3)
+              logger << "== Thread #{wait_thread.inspect} joined late"
             else
-              pstat.terminate # Just in case
-              logger << "== Thread #{pstat.inspect} terminated"
+              wait_thread.terminate # Just in case
+              logger << "== Thread #{wait_thread.inspect} terminated"
             end # Make an effort to reap
           end
 
-          pstat.value # reap already-terminated child.
-          "Command completed #{pstat.value} at #{Time.now}"
+          wait_thread.value # reap already-terminated child.
+          "Command completed #{wait_thread.value} at #{Time.now}"
         end
 
-        def force_kill_process_with_tree(out_reader, pstat, pout, full_script, logger, timeout) # rubocop:disable Metrics/ParameterLists, Metrics/LineLength
+        def force_kill_process_with_tree(out_reader, wait_thread, pout, full_script, logger, timeout) # rubocop:disable Metrics/ParameterLists, Metrics/LineLength
           out_reader.exit
           tree = Helper::Processes.ps_tree
-          pid = pstat[:pid].to_s
+          pid = wait_thread[:pid].to_s
           unless Helper::Processes.ms_windows?
-            logger << "Timeout, so trying SIGUSR1 to trigger watchdog stacktrace #{pstat[:pid]}=#{full_script}"
+            logger << "Timeout, so trying SIGUSR1 to trigger watchdog stacktrace #{wait_thread[:pid]}=#{full_script}"
             Helper::Processes.kill_tree('SIGUSR1', pid, logger, tree)
             sleep 2
           end
 
-          logger << "Timeout, so trying SIGINT at #{pstat[:pid]}=#{full_script}"
+          logger << "Timeout, so trying SIGINT at #{wait_thread[:pid]}=#{full_script}"
 
           log_copy = Thread.new do
             pout.each_line { |l| logger << l }
@@ -167,7 +167,7 @@ module ParallelCucumber
             end
 
             logger << "About to reap root #{pid}"
-            pstat.value # reap root - everything else should be reaped by init.
+            wait_thread.value # reap root - everything else should be reaped by init.
             logger << "Reaped root #{pid}"
           end
         end
