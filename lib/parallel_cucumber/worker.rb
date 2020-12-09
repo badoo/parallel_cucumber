@@ -201,7 +201,8 @@ module ParallelCucumber
       begin
         ParallelCucumber::Helper::Command.exec_command(
           batch_env, 'batch', mapped_batch_cmd, @logger, @log_decoration,
-          timeout: @batch_timeout, return_script_error: true
+          timeout: @batch_timeout, capture: true, return_script_error: true,
+          return_on_timeout: true, collect_stacktrace: true
         )
       rescue => e
         @logger << "ERROR #{e} #{e.backtrace.first(5)}"
