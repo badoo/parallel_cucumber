@@ -35,7 +35,7 @@ module ParallelCucumber
           else
             descendants(root, logger, tree, old_tree, 'kill') do |pid, node|
               begin
-                logger.warn "Killing #{node}"
+                logger.warn "Sending signal #{sig} to #{node}"
                 Process.kill(sig, pid.to_i)
               rescue Errno::ESRCH
                 nil # It's gone already? Hurrah!
@@ -44,7 +44,7 @@ module ParallelCucumber
           end
           # Let's kill pid unconditionally: descendants will go astray once reparented.
           begin
-            logger.warn "Killing #{root} just in case"
+            logger.warn "Sending signal #{sig} to root process #{root} just in case"
             Process.kill(sig, root.to_i)
           rescue Errno::ESRCH
             nil # It's gone already? Hurrah!

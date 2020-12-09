@@ -15,8 +15,13 @@ module ParallelCucumber
         end
 
         ONE_SECOND = 1
+        STACKTRACE_COLLECTION_TIMEOUT = 10
 
-        def exec_command(env, desc, script, logger, log_decoration = {}, timeout: 30, capture: false, return_script_error: false) # rubocop:disable Metrics/ParameterLists, Metrics/LineLength
+        # rubocop:disable Metrics/ParameterLists, Metrics/LineLength
+        def exec_command(env, desc, script, logger, log_decoration = {},
+                         timeout: 30, capture: false, return_script_error: false,
+                         return_on_timeout: false, collect_stacktrace: false
+        )
           block_name = ''
           if log_decoration['worker_block']
             if log_decoration['start'] || log_decoration['end']
@@ -32,11 +37,13 @@ module ParallelCucumber
           pout = nil
           capture &&= [''] # Pass by reference
           exception = nil
+          command_pid = nil
 
           begin
             completed = begin
               pin, pout, wait_thread = Open3.popen2e(env, full_script)
-              logger << "Command has pid #{wait_thread[:pid]}\n"
+              command_pid = wait_thread[:pid].to_s
+              logger << "Command has pid #{command_pid}\n"
               pin.close
               out_reader = Thread.new do
                 output_reader(pout, wait_thread, logger, capture)
@@ -59,7 +66,11 @@ module ParallelCucumber
             capture_or_empty = capture ? capture.first : '' # Even '' is truthy
             return wait_thread.value.success? ? capture_or_empty : nil
           rescue TimedOutError => e
-            force_kill_process_with_tree(out_reader, wait_thread, pout, full_script, logger, timeout)
+            process_tree = Helper::Processes.ps_tree
+            send_usr1_to_process_with_tree(command_pid, full_script, logger, process_tree) if collect_stacktrace
+            force_kill_process_with_tree(out_reader, wait_thread, pout, full_script, logger, timeout, process_tree, command_pid)
+
+            return capture.first if return_on_timeout
 
             exception = e
           rescue => e
@@ -75,6 +86,7 @@ module ParallelCucumber
 
           raise exception
         end
+        # rubocop:enable Metrics/ParameterLists, Metrics/LineLength
 
         def log_until_incomplete_line(logger, out_string)
           loop do
@@ -130,15 +142,16 @@ module ParallelCucumber
           "Command completed #{wait_thread.value} at #{Time.now}"
         end
 
-        def force_kill_process_with_tree(out_reader, wait_thread, pout, full_script, logger, timeout) # rubocop:disable Metrics/ParameterLists, Metrics/LineLength
+        def send_usr1_to_process_with_tree(command_pid, full_script, logger, tree)
+          return if Helper::Processes.ms_windows?
+
+          logger << "Timeout, so trying SIGUSR1 to trigger watchdog stacktrace #{command_pid}=#{full_script}"
+          Helper::Processes.kill_tree('SIGUSR1', command_pid, logger, tree)
+          sleep(STACKTRACE_COLLECTION_TIMEOUT) # Wait enough time for child processes to act on SIGUSR1
+        end
+
+        def force_kill_process_with_tree(out_reader, wait_thread, pout, full_script, logger, timeout, tree, pid) # rubocop:disable Metrics/ParameterLists, Metrics/LineLength
           out_reader.exit
-          tree = Helper::Processes.ps_tree
-          pid = wait_thread[:pid].to_s
-          unless Helper::Processes.ms_windows?
-            logger << "Timeout, so trying SIGUSR1 to trigger watchdog stacktrace #{wait_thread[:pid]}=#{full_script}"
-            Helper::Processes.kill_tree('SIGUSR1', pid, logger, tree)
-            sleep 2
-          end
 
           logger << "Timeout, so trying SIGINT at #{wait_thread[:pid]}=#{full_script}"
 
