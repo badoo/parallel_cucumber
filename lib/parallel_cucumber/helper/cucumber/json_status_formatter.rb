@@ -20,6 +20,7 @@ module ParallelCucumber
             details[:exception_classname] = event.result.exception.class.to_s
             details[:exception_message] = event.result.exception.message
           end
+          details[:name] = "#{event.test_case.feature}: #{event.test_case.name}"
           details[:finish_time] = Time.now.to_i
           @result[event.test_case.location.to_s] = details
         end
