@@ -52,11 +52,15 @@ module ParallelCucumber
           elsif any_worker_busy?
             kill_surplus_workers
           else
-            kill_all_workers
             break
           end
           sleep 0.5
         end
+      rescue StandardError => e
+        puts "There was a FATAL ERROR with worker manager. #{e}"
+        raise e
+      ensure
+        kill_all_workers
       end
     end
 
