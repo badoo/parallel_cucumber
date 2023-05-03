@@ -18,7 +18,7 @@ Gem::Specification.new name, ParallelCucumber::VERSION do |spec|
 
   spec.add_runtime_dependency 'cucumber', '~> 2'
   spec.add_runtime_dependency 'parallel', '~> 1.12'
-  spec.add_runtime_dependency 'redis', '~> 4.0'
+  spec.add_runtime_dependency 'redis', '5.0.6'
   spec.add_development_dependency 'overcommit', '0.46.0'
   spec.add_development_dependency 'rubocop', '0.73.0'
 end

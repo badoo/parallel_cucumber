@@ -1,18 +1,19 @@
 PATH
   remote: .
   specs:
-    parallel_cucumber (0.2.23)
+    parallel_cucumber (0.2.27.pre.1)
       cucumber (~> 2)
       parallel (~> 1.12)
-      redis (~> 4.0)
+      redis (= 5.0.6)
 
 GEM
   remote: https://rubygems.org/
   specs:
-    ast (2.4.0)
+    ast (2.4.2)
     builder (3.2.4)
     childprocess (0.9.0)
       ffi (~> 1.0, >= 1.0.11)
+    connection_pool (2.4.0)
     cucumber (2.99.0)
       builder (>= 2.1.2)
       cucumber-core (~> 1.5.0)
@@ -24,21 +25,24 @@ GEM
     cucumber-core (1.5.0)
       gherkin (~> 4.0)
     cucumber-wire (0.0.1)
-    diff-lcs (1.4.4)
-    ffi (1.9.25)
+    diff-lcs (1.5.0)
+    ffi (1.15.5)
     gherkin (4.1.3)
-    iniparse (1.4.4)
+    iniparse (1.5.0)
     jaro_winkler (1.5.4)
-    multi_json (1.14.1)
-    multi_test (0.1.2)
+    multi_json (1.15.0)
+    multi_test (1.1.0)
     overcommit (0.46.0)
       childprocess (~> 0.6, >= 0.6.3)
       iniparse (~> 1.4)
-    parallel (1.19.1)
-    parser (2.7.0.2)
-      ast (~> 2.4.0)
-    rainbow (3.0.0)
-    redis (4.2.5)
+    parallel (1.23.0)
+    parser (3.2.2.1)
+      ast (~> 2.4.1)
+    rainbow (3.1.1)
+    redis (5.0.6)
+      redis-client (>= 0.9.0)
+    redis-client (0.14.1)
+      connection_pool
     rubocop (0.73.0)
       jaro_winkler (~> 1.5.1)
       parallel (~> 1.10)
@@ -46,7 +50,7 @@ GEM
       rainbow (>= 2.2.2, < 4.0)
       ruby-progressbar (~> 1.7)
       unicode-display_width (>= 1.4.0, < 1.7)
-    ruby-progressbar (1.10.0)
+    ruby-progressbar (1.13.0)
     unicode-display_width (1.6.1)
 
 PLATFORMS
@@ -58,4 +62,4 @@ DEPENDENCIES
   rubocop (= 0.73.0)
 
 BUNDLED WITH
-   1.17.3
+   2.3.6
