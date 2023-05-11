@@ -17,6 +17,7 @@ module ParallelCucumber
       env_variables: {},
       n: 0, # Default: computed from longest list in json parameters, minimum 1.
       queue_connection_params: ['redis://127.0.0.1:6379', DateTime.now.strftime('queue-%Y%m%d%H%M%S')],
+      queue_connection_timeout: 5,
       worker_delay: 0,
       test_command: 'cucumber',
       backup_worker_count: 0
@@ -127,6 +128,15 @@ module ParallelCucumber
             exit 1
           end
           options[:batch_size] = batch_size
+        end
+
+        help_message = "Timeout for connection for Redis client. Default is #{DEFAULTS[:queue_connection_timeout]}"
+        opts.on('--queue-connection-timeout TIMEOUT', Integer, help_message) do |queue_connection_timeout|
+          if queue_connection_timeout < 1
+            puts "The minimum queue_connection_timeout is 1 but given: '#{queue_connection_timeout}'"
+            exit 1
+          end
+          options[:queue_connection_timeout] = queue_connection_timeout
         end
 
         opts.on('--group-by ENV_VAR', 'Key for cumulative report') do |group_by|

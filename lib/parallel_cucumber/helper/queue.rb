@@ -5,17 +5,9 @@ module ParallelCucumber
     class Queue
       attr_reader :name
 
-      def initialize(queue_connection_params, append = '')
-        # queue_connection_params:
-        #   `url--[name]`
-        # url:
-        #   TCP connection: `redis://[password]@[hostname]:[port]/[db]` (password, port and database are optional),
-        #   unix socket connection: `unix://[path to Redis socket]`.
-        # name:
-        #   queue name, default is `queue`
-        url, name = queue_connection_params
-        @redis = Redis.new(url: url)
-        @name = name + append
+      def initialize(redis, queue_name)
+        @redis = redis
+        @name = queue_name
       end
 
       def enqueue(elements)

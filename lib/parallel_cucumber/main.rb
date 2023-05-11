@@ -1,4 +1,5 @@
 require 'parallel'
+require 'connection_pool'
 
 module ParallelCucumber
   class Main
@@ -11,6 +12,11 @@ module ParallelCucumber
       load_external_files
       @logger.progname = 'Primary' # Longer than 'Main', to make the log file pretty.
       @logger.level = options[:debug] ? ParallelCucumber::CustomLogger::DEBUG : ParallelCucumber::CustomLogger::INFO
+      @redis_url, @default_queue_name = @options[:queue_connection_params]
+      queue_timeout = @options[:queue_connection_timeout]
+      @redis_pool = ConnectionPool::Wrapper.new(size: 10, timeout: queue_timeout) {
+        Redis.new(url: @redis_url, timeout: queue_timeout, connect_timeout: queue_timeout)
+      }
     end
 
     def load_external_files
@@ -23,7 +29,7 @@ module ParallelCucumber
 
     def run
       @logger.debug("Connecting to Queue: #{@options[:queue_connection_params]}")
-      queue = Helper::Queue.new(@options[:queue_connection_params])
+      queue = Helper::Queue.new(@redis_pool, @default_queue_name)
 
       unless queue.empty?
         @logger.error("Queue '#{queue.name}' is not empty")
@@ -64,9 +70,10 @@ module ParallelCucumber
           @logger.warn("Queue for #{k} is empty - nothing selected by #{v}")
         else
           directed_tests = (directed_tests & long_running_tests) + (directed_tests - long_running_tests).shuffle
-          @logger.debug("Connecting to Queue: _#{k}")
-          directed_queue = Helper::Queue.new(@options[:queue_connection_params], "_#{k}")
-          @logger.info("Adding #{directed_tests.count} tests to queue _#{k}")
+          directed_queue_name = "#{@default_queue_name}_#{k}"
+          @logger.debug("Connecting to Queue: #{directed_queue_name}")
+          directed_queue = Helper::Queue.new(@redis_pool, directed_queue_name)
+          @logger.info("Adding #{directed_tests.count} tests to queue #{directed_queue_name}")
           directed_queue.enqueue(directed_tests)
           tests -= directed_tests
           collective_queue_size += directed_queue.length
@@ -154,7 +161,7 @@ module ParallelCucumber
                                  @options[:log_decoration]['worker_block'] || 'workers',
                                  @logger) do
 
-        worker_manager =  ParallelCucumber::WorkerManager.new(@options, @logger)
+        worker_manager =  ParallelCucumber::WorkerManager.new(@options, @logger, @redis_pool, @default_queue_name)
         worker_manager.start(number_of_workers)
       ensure
         worker_manager.kill

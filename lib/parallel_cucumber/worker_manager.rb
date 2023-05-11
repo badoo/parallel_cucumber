@@ -1,19 +1,18 @@
 module ParallelCucumber
   class WorkerManager
-    def initialize(options, logger)
+    def initialize(options, logger, redis, default_queue_name)
       @options = options
       @batch_size = options[:batch_size]
       @logger = logger
-      @queue_connection_params = options[:queue_connection_params]
-      @backlog = ParallelCucumber::Helper::Queue.new(@queue_connection_params)
+      @backlog = ParallelCucumber::Helper::Queue.new(redis, default_queue_name)
       @queue_tracker = Tracker.new(@backlog)
       @back_up_worker_size = options[:backup_worker_count]
       @directed_queues = Hash.new do |hash, key|
-        hash[key] = ParallelCucumber::Helper::Queue.new(@queue_connection_params, "_#{key}")
+        hash[key] = ParallelCucumber::Helper::Queue.new(redis, "#{default_queue_name}_#{key}")
       end
       @workers = {}
-      @unchecked_workers = Queue.new
-      @healthy_workers = Queue.new
+      @unchecked_workers = ::Thread::Queue.new
+      @healthy_workers = ::Thread::Queue.new
     end
 
     def start(number_of_workers)

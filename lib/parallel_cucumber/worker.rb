@@ -24,7 +24,7 @@ module ParallelCucumber
       @log_file = "#{@log_dir}/worker_#{index}.log"
       @stdout_logger = stdout_logger # .sync writes only.
       @is_busy_running_test = false
-      @jobs_queue = Queue.new
+      @jobs_queue = ::Thread::Queue.new
       @manager = manager
     end
 
