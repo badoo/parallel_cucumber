@@ -15,7 +15,12 @@ module ParallelCucumber
       @redis_url, @default_queue_name = @options[:queue_connection_params]
       queue_timeout = @options[:queue_connection_timeout]
       @redis_pool = ConnectionPool::Wrapper.new(size: 10, timeout: queue_timeout) {
-        Redis.new(url: @redis_url, timeout: queue_timeout, connect_timeout: queue_timeout)
+        Redis.new(
+          url: @redis_url,
+          timeout: queue_timeout,
+          connect_timeout: queue_timeout,
+          reconnect_attempts: @options[:queue_reconnect_attempts],
+        )
       }
     end
 
