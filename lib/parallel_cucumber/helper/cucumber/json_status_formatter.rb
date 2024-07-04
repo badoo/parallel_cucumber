@@ -7,14 +7,14 @@ module ParallelCucumber
         include ::Cucumber::Formatter::Io
 
         def initialize(config)
-          config.on_event :after_test_case, &method(:on_after_test_case)
-          config.on_event :finished_testing, &method(:on_finished_testing)
+          config.on_event :test_case_finished, &method(:on_test_case_finished)
+          config.on_event :test_run_finished, &method(:on_test_run_finished)
 
-          @io     = ensure_io(config.out_stream)
+          @io     = ensure_io(config.out_stream, nil)
           @result = {}
         end
 
-        def on_after_test_case(event)
+        def on_test_case_finished(event)
           details = {status: event.result.to_sym}
           if event.result.respond_to?(:exception)
             details[:exception_classname] = event.result.exception.class.to_s
@@ -25,7 +25,7 @@ module ParallelCucumber
           @result[event.test_case.location.to_s] = details
         end
 
-        def on_finished_testing(*)
+        def on_test_run_finished(*)
           @io.write(@result.to_json)
         end
       end

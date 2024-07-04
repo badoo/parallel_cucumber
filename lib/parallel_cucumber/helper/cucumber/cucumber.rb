@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'English'
 require 'erb'
 require 'json'
@@ -25,6 +27,8 @@ module ParallelCucumber
         end
 
         def parse_json_report(json_report)
+          puts('json_report')
+          puts(json_report)
           report = JSON.parse(json_report, symbolize_names: true)
           report.each do |scenario, details|
             report[scenario][:status] = case details[:status]
@@ -65,7 +69,7 @@ module ParallelCucumber
           content = nil
 
           Tempfile.open(%w[dry-run .json]) do |f|
-            dry_run_options = "--dry-run --format ParallelCucumber::Helper::Cucumber::JsonStatusFormatter --out #{f.path}"
+            dry_run_options = "--dry-run --format json --out #{f.path}"
 
             cmd = "cucumber #{options} #{dry_run_options} #{args_string}"
             _stdout, stderr, status = Open3.capture3(cmd)

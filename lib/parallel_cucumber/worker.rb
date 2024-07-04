@@ -189,7 +189,7 @@ module ParallelCucumber
       FileUtils.mkpath(test_batch_dir)
 
       test_state = "#{test_batch_dir}/test_state.json"
-      cmd = "#{@test_command} --format ParallelCucumber::Helper::Cucumber::JsonStatusFormatter --out #{test_state} #{@cucumber_options} "
+      cmd = "#{@test_command} --format json --out #{test_state} #{@cucumber_options} "
       batch_env = {
         :TEST_BATCH_ID.to_s => batch_id,
         :TEST_BATCH_DIR.to_s => test_batch_dir,
