@@ -52,20 +52,7 @@ module ParallelCucumber
         exit(0)
       end
 
-      long_running_tests = if @options[:long_running_tests]
-                             narrowed_long_running_tests = [
-                               @options[:cucumber_args],
-                               @options[:long_running_tests]
-                             ].join(' ')
-                             Helper::Cucumber.selected_tests(@options[:cucumber_options], narrowed_long_running_tests)
-                           else
-                             []
-                           end
-      first_tests = long_running_tests & all_tests
-      if !long_running_tests.empty? && first_tests.empty?
-        @logger.info("No long running tests found in common with main options: #{long_running_tests}")
-      end
-      tests = first_tests + (all_tests - first_tests).shuffle
+      tests = all_tests.shuffle
 
       collective_queue_size = 0
 
@@ -74,7 +61,7 @@ module ParallelCucumber
         if directed_tests.empty?
           @logger.warn("Queue for #{k} is empty - nothing selected by #{v}")
         else
-          directed_tests = (directed_tests & long_running_tests) + (directed_tests - long_running_tests).shuffle
+          directed_tests = directed_tests.shuffle
           directed_queue_name = "#{@default_queue_name}_#{k}"
           @logger.debug("Connecting to Queue: #{directed_queue_name}")
           directed_queue = Helper::Queue.new(@redis_pool, directed_queue_name)
