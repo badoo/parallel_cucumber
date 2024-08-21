@@ -78,7 +78,10 @@ module ParallelCucumber
             @logger.info("Picking most recent time of two, newval: #{newval(:finish_time)}, oldval: #{oldval(:finish_time)}")
           end
 
-          if newval.fetch(:finish_time, -1) > oldval.fetch(:finish_time, -1)
+          new_finish_time = newval.fetch(:finish_time, -1)
+          old_finish_time = oldval.fetch(:finish_time, -1)
+
+          if new_finish_time > old_finish_time
             newval
           else
             oldval
