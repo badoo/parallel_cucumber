@@ -72,8 +72,17 @@ module ParallelCucumber
       end
       @results.inject do |seed, result|
         seed.merge(result) do |_key, oldval, newval|
-          oldval.nil? && newval.nil? ? @logger.warn('Both oldval and newval are empty') : @logger.info("Picking most recent time of two, newval: #{newval}, oldval: #{oldval}")
-          (newval.fetch(:finish_time, -1) > oldval.fetch(:finish_time, -1)) ? newval : oldval
+          if oldval.nil? && newval.nil?
+            @logger.warn('Both oldval and newval are empty')
+          else
+            @logger.info("Picking most recent time of two, newval: #{newval}, oldval: #{oldval}")
+          end
+
+          if newval.fetch(:finish_time, -1) > oldval.fetch(:finish_time, -1)
+            newval
+          else
+            oldval
+          end
         end
       end
     end
