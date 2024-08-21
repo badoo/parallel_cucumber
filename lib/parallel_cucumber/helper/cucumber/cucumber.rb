@@ -72,6 +72,7 @@ module ParallelCucumber
             dry_run_options = "--dry-run --format json --out #{f.path}"
 
             cmd = "cucumber #{options} #{dry_run_options} #{args_string}"
+            puts("ParallelCucumber::Helper::Cucumber dry_run_report => #{cmd}")
             _stdout, stderr, status = Open3.capture3(cmd)
             f.close
 
