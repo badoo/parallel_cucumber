@@ -14,7 +14,7 @@ module ParallelCucumber
         def selected_tests(options, args_string)
           puts "selected_tests (#{options.inspect} #{args_string.inspect})"
           dry_run_report = dry_run_report(options, args_string)
-          parse_json_report(dry_run_report).keys
+          extract_scenarios(dry_run_report)
         end
 
         def batch_mapped_files(options, batch, env)
@@ -24,6 +24,16 @@ module ParallelCucumber
           options.gsub!(/(?:\s|^)--dry-run\s+/, '')
           options.gsub!(%r{((?:\s|^)(?:--out|-o))\s+((?:\S+\/)?(\S+))}) { "#{$1} #{file_map[$2] = "#{batch}/#{$3}"}" } # rubocop:disable Style/PerlBackrefs, Metrics/LineLength
           [options, file_map]
+        end
+
+        def extract_scenarios(json_report)
+          json = JSON.parse(json_report, symbolize_names: true)
+
+          json.map do |feature|
+            scenarios = feature[:elements]
+            file = feature[:uri]
+            scenarios.map { |scenario| "#{file}:#{scenario[:line]}" }
+          end.flatten
         end
 
         def parse_json_report(json_report)
