@@ -1,3 +1,3 @@
 module ParallelCucumber
-  VERSION = '0.2.28.6'.freeze
+  VERSION = '0.2.28.8'.freeze
 end
