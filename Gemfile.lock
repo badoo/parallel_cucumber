@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    parallel_cucumber (0.2.26)
+    parallel_cucumber (0.2.27.1)
       cucumber (~> 2)
       parallel (~> 1.12)
       redis (= 5.0.6)
@@ -39,7 +39,7 @@ GEM
     parser (3.2.2.1)
       ast (~> 2.4.1)
     rainbow (3.1.1)
-    redis (5.0.6)
+    redis (5.2.0)
       redis-client (>= 0.9.0)
     redis-client (0.14.1)
       connection_pool

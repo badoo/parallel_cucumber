@@ -72,7 +72,20 @@ module ParallelCucumber
       end
       @results.inject do |seed, result|
         seed.merge(result) do |_key, oldval, newval|
-          (newval[:finish_time] > oldval[:finish_time]) ? newval : oldval
+          if oldval(:finish_time).nil? && newval(:finish_time).nil?
+            @logger.warn('Both oldval finish_time and newval finish_time are empty')
+          else
+            @logger.info("Picking most recent time of two, newval: #{newval[:finish_time]}, oldval: #{oldval[:finish_time]}")
+          end
+
+          new_finish_time = newval.fetch(:finish_time, -1)
+          old_finish_time = oldval.fetch(:finish_time, -1)
+
+          if new_finish_time > old_finish_time
+            newval
+          else
+            oldval
+          end
         end
       end
     end
