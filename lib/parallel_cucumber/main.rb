@@ -47,6 +47,7 @@ module ParallelCucumber
         Hooks.fire_on_dry_run_error(error)
         raise error
       end
+
       if all_tests.empty?
         @logger.info('There is no tests to run, exiting...')
         exit(0)
@@ -54,26 +55,9 @@ module ParallelCucumber
 
       tests = all_tests.shuffle
 
-      collective_queue_size = 0
-
-      @options[:directed_tests].each do |k, v|
-        directed_tests = Helper::Cucumber.selected_tests(@options[:cucumber_options], v)
-        if directed_tests.empty?
-          @logger.warn("Queue for #{k} is empty - nothing selected by #{v}")
-        else
-          directed_tests = directed_tests.shuffle
-          directed_queue_name = "#{@default_queue_name}_#{k}"
-          @logger.debug("Connecting to Queue: #{directed_queue_name}")
-          directed_queue = Helper::Queue.new(@redis_pool, directed_queue_name)
-          @logger.info("Adding #{directed_tests.count} tests to queue #{directed_queue_name}")
-          directed_queue.enqueue(directed_tests)
-          tests -= directed_tests
-          collective_queue_size += directed_queue.length
-        end
-      end
-
       @logger.info("Adding #{tests.count} tests to Queue")
-      queue.enqueue(tests) unless tests.empty?
+      queue.enqueue(tests)
+
       begin
         Hooks.fire_before_workers(queue: queue)
       rescue StandardError => e
@@ -81,8 +65,7 @@ module ParallelCucumber
         @logger.warn("There was exception in before_workers hook #{e.message} \n #{trace}")
       end
 
-      collective_queue_size += queue.length
-      number_of_workers = determine_work_and_batch_size(collective_queue_size)
+      number_of_workers = determine_work_and_batch_size(queue.length)
 
       status_totals = {}
       total_mm, total_ss = time_it do

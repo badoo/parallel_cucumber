@@ -11,7 +11,6 @@ module ParallelCucumber
       batch_error_timeout: 30,
       cucumber_options: '',
       debug: false,
-      directed_tests: {},
       log_dir: '.',
       log_decoration: {},
       env_variables: {},
@@ -75,15 +74,6 @@ module ParallelCucumber
           raise(ArgumentError, "No such file to load: #{load_file}") unless File.exist?(load_file)
           options[:load_files] ||= []
           options[:load_files] << load_file
-        end
-
-        opts.on('--directed-tests JSON', 'Direct tests to specific workers, e.g. {"0": "-t @head"}') do |json|
-          options[:directed_tests] = begin
-            JSON.parse(json)
-          rescue JSON::ParserError
-            puts 'Log block quoting not in JSON format. Did you forget to escape the quotes?'
-            raise
-          end
         end
 
         opts.on('--test-command COMMAND',
