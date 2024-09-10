@@ -7,7 +7,7 @@ module ParallelCucumber
       @mark = 0
       # Don't want to log half-lines.
       @incomplete_line = nil
-      self.level = Logger::Severity::LEVELS.fetch(ENV.fetch('LOG_LEVEL', 'INFO').downcase)
+      self.level = ::Logger::Severity.coerce(ENV.fetch('LOG_LEVEL', 'INFO'))
       self.formatter = proc do |severity, datetime, progname, msg|
         "#{datetime} #{progname} #{severity} [ParallelCucumber] #{msg}\n"
       end
