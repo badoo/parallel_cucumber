@@ -18,12 +18,12 @@ module ParallelCucumber
         end
 
         def batch_mapped_files(options, batch, env)
-          options = options.dup
-          options = expand_profiles(options, env) unless config_file.nil?
+          new_options = options.dup
+          new_options = expand_profiles(new_options, env) unless config_file.nil?
           file_map = {}
-          options.gsub!(/(?:\s|^)--dry-run\s+/, '')
-          options.gsub!(%r{((?:\s|^)(?:--out|-o))\s+((?:\S+\/)?(\S+))}) { "#{$1} #{file_map[$2] = "#{batch}/#{$3}"}" } # rubocop:disable Style/PerlBackrefs, Metrics/LineLength
-          [options, file_map]
+          new_options.gsub!(/(?:\s|^)--dry-run\s+/, '')
+          new_options.gsub!(%r{((?:\s|^)(?:--out|-o))\s+((?:\S+\/)?(\S+))}) { "#{$1} #{file_map[$2] = "#{batch}/#{$3}"}" } # rubocop:disable Style/PerlBackrefs, Metrics/LineLength
+          [new_options, file_map]
         end
 
         def extract_scenarios(json_report)
@@ -38,25 +38,16 @@ module ParallelCucumber
 
         def parse_json_report(json_report)
           report = JSON.parse(json_report, symbolize_names: true)
-          report.each do |scenario, details|
-            report[scenario][:status] = case details[:status]
-                                        when 'failed'
-                                          Status::FAILED
-                                        when 'passed'
-                                          Status::PASSED
-                                        when 'pending'
-                                          Status::PENDING
-                                        when 'skipped'
-                                          Status::SKIPPED
-                                        when 'undefined'
-                                          Status::UNDEFINED
-                                        when 'unknown'
-                                          Status::UNKNOWN
-                                        else
-                                          Status::UNKNOWN
-                                        end
+          results = {}
+
+          report.each do |feature|
+            feature[:elements].each do |scenario|
+              status = get_scenario_status(scenario)
+              results["#{feature[:uri]}:#{scenario[:line]}"] ||= {}
+              results["#{feature[:uri]}:#{scenario[:line]}"][:status] ||= status
+            end
           end
-          report
+          results
         end
 
         def unknown_result(tests)
@@ -68,6 +59,33 @@ module ParallelCucumber
 
         private
 
+        def get_scenario_status(scenario)
+          statuses = scenario[:steps].collect { |step| step[:result][:status] }.uniq
+
+          actual_status = if statuses.count == 1
+                            statuses.first
+                          else
+                            statuses[1]
+                          end
+
+          case actual_status
+          when 'failed'
+            Status::FAILED
+          when 'passed'
+            Status::PASSED
+          when 'pending'
+            Status::PENDING
+          when 'skipped'
+            Status::SKIPPED
+          when 'undefined'
+            Status::UNDEFINED
+          when 'unknown'
+            Status::UNKNOWN
+          else
+            Status::UNKNOWN
+          end
+        end
+
         def dry_run_report(options, args_string)
           options = options.dup
           options = expand_profiles(options) unless config_file.nil?
@@ -76,7 +94,7 @@ module ParallelCucumber
           options = remove_strict_flag(options)
           content = nil
 
-          Tempfile.open(%w[dry-run .json]) do |f|
+          Tempfile.create(%w[dry-run .json]) do |f|
             dry_run_options = "--dry-run --format json --out #{f.path}"
 
             cmd = "cucumber #{options} #{dry_run_options} #{args_string}"
