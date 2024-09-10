@@ -44,9 +44,9 @@ module ParallelCucumber
 
     def format_message(severity, datetime, progname, msg)
       if @level == DEBUG
-        "[#{datetime.strftime('%Y-%m-%d %H:%M:%S')}]\t#{progname}\t#{severity}\t#{msg.gsub(/\s+/, ' ').strip}\n"
+        "[ParallelCucumber] [#{datetime.strftime('%Y-%m-%d %H:%M:%S')}]\t#{progname}\t#{severity}\t#{msg.gsub(/\s+/, ' ').strip}\n"
       else
-        "#{progname}\t#{msg.gsub(/\s+/, ' ').strip}\n"
+        "[ParallelCucumber] #{progname}\t#{msg.gsub(/\s+/, ' ').strip}\n"
       end
     end
   end
