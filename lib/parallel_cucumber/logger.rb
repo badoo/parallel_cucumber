@@ -2,11 +2,15 @@ require 'logger'
 
 module ParallelCucumber
   class CustomLogger < Logger
-    def initialize(*)
+    ruby2_keywords def initialize(*)
       super
       @mark = 0
       # Don't want to log half-lines.
       @incomplete_line = nil
+      self.level = Logger::Severity::LEVELS.fetch(ENV.fetch('LOG_LEVEL', 'INFO').downcase)
+      self.formatter = proc do |severity, datetime, progname, msg|
+        "#{datetime} #{progname} #{severity} [ParallelCucumber] #{msg}\n"
+      end
     end
 
     def synch
@@ -43,11 +47,7 @@ module ParallelCucumber
     end
 
     def format_message(severity, datetime, progname, msg)
-      if @level == DEBUG
-        "[ParallelCucumber] [#{datetime.strftime('%Y-%m-%d %H:%M:%S')}]\t#{progname}\t#{severity}\t#{msg.gsub(/\s+/, ' ').strip}\n"
-      else
-        "[ParallelCucumber] #{progname}\t#{msg.gsub(/\s+/, ' ').strip}\n"
-      end
+      "#{datetime}\t#{progname}\t#{severity} [ParallelCucumber] #{msg.gsub(/\s+/, ' ').strip}\n"
     end
   end
 end
