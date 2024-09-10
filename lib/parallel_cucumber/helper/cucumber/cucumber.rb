@@ -37,8 +37,6 @@ module ParallelCucumber
         end
 
         def parse_json_report(json_report)
-          puts('json_report')
-          puts(json_report)
           report = JSON.parse(json_report, symbolize_names: true)
           report.each do |scenario, details|
             report[scenario][:status] = case details[:status]
