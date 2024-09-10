@@ -205,7 +205,7 @@ module ParallelCucumber
           return_on_timeout: true, collect_stacktrace: true
         )
       rescue => e
-        @logger << "ERROR #{e} #{e.backtrace.first(5)}"
+        @logger.error("ERROR #{e} #{e.backtrace.first(5)}")
 
         begin
           Hooks.fire_on_batch_error(tests: tests, batch_id: batch_id, env: batch_env, exception: e)
@@ -224,14 +224,14 @@ module ParallelCucumber
           next if worker == user
           Helper::Processes.cp_rv(worker, user, @logger)
         end
-        @logger << "\nCopied files in map: #{file_map.first(5)}...#{file_map.count}  #{Time.now}\n"
+        @logger.debug("\nCopied files in map: #{file_map.first(5)}...#{file_map.count}  #{Time.now}\n")
         # Copy everything else too, in case it's interesting.
         Helper::Processes.cp_rv("#{test_batch_dir}/*", @log_dir, @logger)
-        @logger << "\nCopied everything else #{Time.now}  #{Time.now}\n"
+        @logger.debug("Copied everything else #{Time.now}  #{Time.now}")
       end
       @logger.update_into(@stdout_logger)
       FileUtils.rm_rf(test_batch_dir)
-      @logger << "\nRemoved all files  #{Time.now}\n" # Tracking down 30 minute pause!
+      @logger.debug("Removed all files  #{Time.now}") # Tracking down 30 minute pause!
       @logger.update_into(@stdout_logger)
     end
 
