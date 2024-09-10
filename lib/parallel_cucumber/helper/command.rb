@@ -32,7 +32,7 @@ module ParallelCucumber
           logger << format(log_decoration['start'] + "\n", block_name) if log_decoration['start']
           full_script = "#{script} 2>&1"
           env_string = env.map { |k, v| "#{k}=#{v}" }.sort.join(' ')
-          logger << "== Running command `#{full_script}` at #{Time.now}\n== with environment variables: #{env_string}\n"
+          logger.debug("== Running command `#{full_script}` at #{Time.now}")
           wait_thread = nil
           pout = nil
           capture &&= [''] # Pass by reference
@@ -43,7 +43,7 @@ module ParallelCucumber
             completed = begin
               pin, pout, wait_thread = Open3.popen2e(env, full_script)
               command_pid = wait_thread[:pid].to_s
-              logger << "Command has pid #{command_pid}\n"
+              logger.debug("Command has pid #{command_pid}")
               pin.close
               out_reader = Thread.new do
                 output_reader(pout, wait_thread, logger, capture)
@@ -59,7 +59,7 @@ module ParallelCucumber
               "Command completed #{wait_thread.value} at #{Time.now}"
             end
 
-            logger << "#{completed}\n"
+            logger.debug("#{completed}")
 
             raise "Script returned #{wait_thread.value.exitstatus}" unless wait_thread.value.success? || return_script_error
 
@@ -92,8 +92,8 @@ module ParallelCucumber
           loop do
             line, out_string = out_string.split(/\n/, 2)
             return line || '' unless out_string
-            logger << line
-            logger << "\n"
+
+            logger.debug(line)
           end
         end
 
@@ -105,7 +105,7 @@ module ParallelCucumber
           loop do
             io_select = IO.select([pout], [], [], ONE_SECOND)
             unless io_select || wait_thread.alive?
-              logger << "\n== Terminating because io_select=#{io_select} when wait_thread.alive?=#{wait_thread.alive?}\n"
+              logger.info("== Terminating because io_select=#{io_select} when wait_thread.alive?=#{wait_thread.alive?}")
               break
             end
             next unless io_select
@@ -115,26 +115,26 @@ module ParallelCucumber
             out_string = log_until_incomplete_line(logger, out_string + partial)
           end
         rescue EOFError
-          logger << "\n== EOF is normal exit, #{wait_thread.inspect}\n"
+          logger.error("== EOF is normal exit, #{wait_thread.inspect}")
         rescue => e
-          logger << "\n== Exception in out_reader due to #{e.inspect} #{e.backtrace}\n"
+          logger.error("== Exception in out_reader due to #{e.inspect} #{e.backtrace}")
         ensure
-          logger << out_string
-          logger << ["\n== Left out_reader at #{Time.now}; ",
-                     "pipe=#{wait_thread.status}+#{wait_thread.status ? '≤no value≥' : wait_thread.value}\n"].join
+          logger.debug(out_string)
+          logger.debug(["== Left out_reader at #{Time.now}; ",
+                     "pipe=#{wait_thread.status}+#{wait_thread.status ? '≤no value≥' : wait_thread.value}"].join)
         end
 
         def graceful_process_shutdown(out_reader, wait_thread, pout, logger)
           out_reader.value # Should terminate with wait_thread
           pout.close
           if wait_thread.status
-            logger << "== Thread #{wait_thread.inspect} is not dead"
+            logger.debug("== Thread #{wait_thread.inspect} is not dead")
 
             if wait_thread.join(3)
-              logger << "== Thread #{wait_thread.inspect} joined late"
+              logger.debug("== Thread #{wait_thread.inspect} joined late")
             else
               wait_thread.terminate # Just in case
-              logger << "== Thread #{wait_thread.inspect} terminated"
+              logger.debug("== Thread #{wait_thread.inspect} terminated")
             end # Make an effort to reap
           end
 
@@ -145,7 +145,7 @@ module ParallelCucumber
         def send_usr1_to_process_with_tree(command_pid, full_script, logger, tree)
           return if Helper::Processes.ms_windows?
 
-          logger << "Timeout, so trying SIGUSR1 to trigger watchdog stacktrace #{command_pid}=#{full_script}"
+          logger.error("Timeout, so trying SIGUSR1 to trigger watchdog stacktrace #{command_pid}=#{full_script}")
           Helper::Processes.kill_tree('SIGUSR1', command_pid, logger, tree)
           sleep(STACKTRACE_COLLECTION_TIMEOUT) # Wait enough time for child processes to act on SIGUSR1
         end
@@ -153,35 +153,35 @@ module ParallelCucumber
         def force_kill_process_with_tree(out_reader, wait_thread, pout, full_script, logger, timeout, tree, pid) # rubocop:disable Metrics/ParameterLists, Metrics/LineLength
           out_reader.exit
 
-          logger << "Timeout, so trying SIGINT at #{wait_thread[:pid]}=#{full_script}"
+          logger.error("Timeout, so trying SIGINT at #{wait_thread[:pid]}=#{full_script}")
 
           log_copy = Thread.new do
-            pout.each_line { |l| logger << l }
+            pout.each_line { |l| logger.debug(l) }
           end
           log_copy.exit unless log_copy.join(2)
 
           pout.close
 
           wait_sigint = 15
-          logger << "Timeout #{timeout}s was reached. Sending SIGINT(2), SIGKILL after #{wait_sigint}s."
+          logger.error("Timeout #{timeout}s was reached. Sending SIGINT(2), SIGKILL after #{wait_sigint}s.")
           begin
             Helper::Processes.kill_tree('SIGINT', pid, logger, tree)
 
             timed_out = wait_sigint.times do |t|
               break if Helper::Processes.all_pids_dead?(pid, logger, nil, tree)
-              logger << "Wait dead #{t} pid #{pid}"
+              logger.debug("Wait dead #{t} pid #{pid}")
               sleep 1
             end
 
             if timed_out
-              logger << "Process #{pid} lasted #{wait_sigint}s after SIGINT(2), so SIGKILL(9)! Fatality!"
+              logger.error("Process #{pid} lasted #{wait_sigint}s after SIGINT(2), so SIGKILL(9)! Fatality!")
               Helper::Processes.kill_tree('SIGKILL', pid, logger, nil, tree)
-              logger << "Tried SIGKILL #{pid}!"
+              logger.error("Tried SIGKILL #{pid}!")
             end
 
-            logger << "About to reap root #{pid}"
+            logger.debug("About to reap root #{pid}")
             wait_thread.value # reap root - everything else should be reaped by init.
-            logger << "Reaped root #{pid}"
+            logger.debug("Reaped root #{pid}")
           end
         end
       end
