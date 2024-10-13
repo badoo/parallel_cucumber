@@ -9,7 +9,7 @@ module ParallelCucumber
       @incomplete_line = nil
       self.level = ::Logger::Severity.coerce(ENV.fetch('LOG_LEVEL', 'INFO'))
       self.formatter = proc do |severity, datetime, progname, msg|
-        "#{datetime} #{progname} #{severity} [ParallelCucumber] #{msg}\n"
+        "#{datetime} #{severity} [ParallelCucumber] #{progname} #{msg}\n"
       end
     end
 
@@ -47,7 +47,7 @@ module ParallelCucumber
     end
 
     def format_message(severity, datetime, progname, msg)
-      "#{datetime}\t#{progname}\t#{severity} [ParallelCucumber] #{msg.gsub(/\s+/, ' ').strip}\n"
+      "#{datetime} #{severity} [ParallelCucumber] #{progname} #{msg.gsub(/\s+/, ' ').strip}\n"
     end
   end
 end
