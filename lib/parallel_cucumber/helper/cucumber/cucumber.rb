@@ -12,18 +12,12 @@ module ParallelCucumber
     module Cucumber
       class << self
         def selected_tests(options, args_string)
-          puts "selected_tests (#{options.inspect} #{args_string.inspect})"
+          puts "ParallelCucumber::Helper::Cucumber selected_tests (#{options.inspect} #{args_string.inspect})"
           dry_run_report = dry_run_report(options, args_string)
-          extract_scenarios(dry_run_report)
-        end
-
-        def batch_mapped_files(options, batch, env)
-          new_options = options.dup
-          new_options = expand_profiles(new_options, env) unless config_file.nil?
-          file_map = {}
-          new_options.gsub!(/(?:\s|^)--dry-run\s+/, '')
-          new_options.gsub!(%r{((?:\s|^)(?:--out|-o))\s+((?:\S+\/)?(\S+))}) { "#{$1} #{file_map[$2] = "#{batch}/#{$3}"}" } # rubocop:disable Style/PerlBackrefs, Metrics/LineLength
-          [new_options, file_map]
+          puts 'ParallelCucumber::Helper::Cucumber dry_run_report generated'
+          scenarios = extract_scenarios(dry_run_report)
+          puts "ParallelCucumber::Helper::Cucumber selected scenarios:\n\t\t#{scenarios.join("\n\t\t")}"
+          scenarios
         end
 
         def extract_scenarios(json_report)
@@ -97,7 +91,7 @@ module ParallelCucumber
           Tempfile.create(%w[dry-run .json]) do |f|
             dry_run_options = "--dry-run --format json --out #{f.path}"
 
-            cmd = "cucumber #{options} #{dry_run_options} #{args_string}"
+            cmd = "bundle exec cucumber #{options} #{dry_run_options} #{args_string}"
             puts("ParallelCucumber::Helper::Cucumber dry_run_report => #{cmd}")
             _stdout, stderr, status = Open3.capture3(cmd)
             f.close
