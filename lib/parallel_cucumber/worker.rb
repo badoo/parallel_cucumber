@@ -1,6 +1,7 @@
 require 'English'
 require 'timeout'
-require 'tmpdir' # I loathe Ruby.
+require 'tmpdir'
+require_relative 'helper/cucumber/cucumber_config_provider.rb'
 
 module ParallelCucumber
   class Worker
@@ -124,9 +125,14 @@ module ParallelCucumber
       results
     end
 
+    # @return String for example: "W-123456"
+    def generate_batch_id
+      "#{@name}-#{Time.now.to_i}"
+    end
+
     def run_batch(env, results, running_total, tests)
       @is_busy_running_test = true
-      batch_id = "#{Time.now.to_i}-#{@index}"
+      batch_id = generate_batch_id
       @logger.debug("Batch ID is #{batch_id}")
 
       batch_mm, batch_ss = time_it do
@@ -181,26 +187,42 @@ module ParallelCucumber
       @logger.error("Tests/result mismatch: #{tests.count}!=#{batch_results.count}: #{tests}/#{batch_keys}")
     end
 
+    # @param [String] batch_id for example: W-123456
+    # @param [Hash] env environment for the test batch
+    # @param [Hash] running_total
+    # @param [Array] tests tests to run
     def test_batch(batch_id, env, running_total, tests)
-      # Prefer /tmp to Mac's brain-dead /var/folders/y8/8kqjszcs2slchjx2z5lrw2t80000gp/T/w-1497514590-0 nonsense
-      prefer_tmp = ENV.fetch('PREFER_TMP', Dir.tmpdir)
-      test_batch_dir = "#{Dir.exist?(prefer_tmp) ? prefer_tmp : Dir.tmpdir}/w-#{batch_id}"
+      test_batch_dir = "#{@log_dir}/#{@name}/#{batch_id}" # convention with cucumber.yml
       FileUtils.rm_rf(test_batch_dir)
       FileUtils.mkpath(test_batch_dir)
 
-      test_state = "#{test_batch_dir}/test_state.json"
-      cmd = "#{@test_command} --format json --out #{test_state} #{@cucumber_options} "
       batch_env = {
-        :TEST_BATCH_ID.to_s => batch_id,
-        :TEST_BATCH_DIR.to_s => test_batch_dir,
-        :BATCH_NUMBER.to_s => running_total[:batches].to_s
+        'TEST_BATCH_ID' => batch_id,
+        'TEST_BATCH_DIR' => test_batch_dir,
+        'BATCH_NUMBER' => running_total[:batches].to_s
       }.merge(env)
-      mapped_batch_cmd, file_map = Helper::Cucumber.batch_mapped_files(cmd, test_batch_dir, batch_env)
-      file_map.each { |_user, worker| FileUtils.mkpath(worker) if worker =~ %r{\/$} }
-      mapped_batch_cmd += ' ' + tests.join(' ')
+
+      cucumber_config = ::ParallelCucumber::Helper::CucumberConfigProvider.config_from_options(@cucumber_options, batch_env)
+      cli_helper = ::ParallelCucumber::Helper::CucumberCliHelper.new(cucumber_config)
+
+      batch_env.merge!(cli_helper.env_vars)
+
+      test_result_file = File.join(test_batch_dir, 'test_state.json')
+      cli_helper.formats.push("--format json --out #{test_result_file}")
+
+      command = [
+        @test_command,
+        cli_helper.additional_args.join(' '),
+        cli_helper.excludes.join(' '),
+        cli_helper.requires.join(' '),
+        cli_helper.formats.join(' '),
+        cli_helper.tags.join(' '),
+        tests.join(' ')
+      ].join(' ')
+
       begin
         ParallelCucumber::Helper::Command.exec_command(
-          batch_env, 'batch', mapped_batch_cmd, @logger, @log_decoration,
+          batch_env, 'batch', command, @logger, @log_decoration,
           timeout: @batch_timeout, capture: true, return_script_error: true,
           return_on_timeout: true, collect_stacktrace: true
         )
@@ -216,22 +238,8 @@ module ParallelCucumber
 
         return Helper::Cucumber.unknown_result(tests)
       end
-      parse_results(test_state, tests)
+      parse_results(test_result_file, tests)
     ensure
-      Helper::Command.wrap_block(@log_decoration, "file copy #{Time.now}", @logger) do
-        # Copy files we might have renamed or moved
-        file_map.each do |user, worker|
-          next if worker == user
-          Helper::Processes.cp_rv(worker, user, @logger)
-        end
-        @logger.debug("\nCopied files in map: #{file_map.first(5)}...#{file_map.count}  #{Time.now}\n")
-        # Copy everything else too, in case it's interesting.
-        Helper::Processes.cp_rv("#{test_batch_dir}/*", @log_dir, @logger)
-        @logger.debug("Copied everything else #{Time.now}  #{Time.now}")
-      end
-      @logger.update_into(@stdout_logger)
-      FileUtils.rm_rf(test_batch_dir)
-      @logger.debug("Removed all files  #{Time.now}") # Tracking down 30 minute pause!
       @logger.update_into(@stdout_logger)
     end
 
