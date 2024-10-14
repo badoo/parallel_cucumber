@@ -208,14 +208,14 @@ module ParallelCucumber
       batch_env.merge!(cli_helper.env_vars)
 
       test_result_file = File.join(test_batch_dir, 'test_state.json')
-      cli_helper.formats.push("--format json --out #{test_result_file}")
+      formats = cli_helper.formats + ["--format json --out #{test_result_file}"]
 
       command = [
         @test_command,
         cli_helper.additional_args.join(' '),
         cli_helper.excludes.join(' '),
         cli_helper.requires.join(' '),
-        cli_helper.formats.join(' '),
+        formats.join(' '),
         cli_helper.tags.join(' '),
         tests.join(' ')
       ].join(' ')
