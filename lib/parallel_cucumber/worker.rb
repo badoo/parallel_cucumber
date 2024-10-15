@@ -161,30 +161,48 @@ module ParallelCucumber
     end
 
     def running_totals(batch_results, running_total)
-      batch_info = Status.constants.map do |status|
-        status = Status.const_get(status)
-        [status, batch_results.select { |_t, s| s[:status] == status }.keys]
-      end.to_h
-      batch_info.each do |s, tt|
-        @logger.info("#{s.to_s.upcase} #{tt.count} tests: #{tt.join(' ')}") unless tt.empty?
-        running_total[s] += tt.count unless tt.empty?
+      batch_info = batch_results.group_by { |_test, result| result[:status] }.transform_values(&:count)
+
+      batch_info.each do |status, test_count|
+        if running_total[status].nil?
+          running_total[status] = test_count
+        else
+          running_total[status] += test_count
+        end
       end
+
       running_total[:batches] += 1
-      @logger.info(running_total.sort.to_s + ' t=' + Time.now.to_s)
+      @logger.info("Running totals: #{running_total.sort} at time #{Time.now}")
     end
 
-    def process_results(batch_results, tests)
-      batch_keys = batch_results.keys
-      test_syms = tests.map(&:to_sym)
-      unrun = test_syms - batch_keys
-      surfeit = batch_keys - test_syms
-      unrun.each { |test| batch_results[test][:status] = Status::UNKNOWN }
-      surfeit.each { |test| batch_results.delete(test) }
-      @logger.error("Did not run #{unrun.count}/#{tests.count}: #{unrun.join(' ')}") unless unrun.empty?
-      @logger.error("Extraneous runs (#{surfeit.count}): #{surfeit.join(' ')}") unless surfeit.empty?
-      return if surfeit.empty?
-      # Don't see how this can happen, but...
-      @logger.error("Tests/result mismatch: #{tests.count}!=#{batch_results.count}: #{tests}/#{batch_keys}")
+    # @param [Hash] batch_results dictionary of tests with results
+    # @param [Array] tests_to_execute list of tests to execute
+    def process_results(batch_results, tests_to_execute)
+      tests_with_result    = batch_results.keys
+      tests_without_result = tests_to_execute - tests_with_result
+
+      unless tests_without_result.empty?
+        @logger.error("Don't have test result for #{tests_without_result.count} out of #{tests_to_execute}: #{tests_without_result.join(' ')}") # rubocop:disable Layout/LineLength
+
+        # add result 'UNKNOWN' for each test that does not have a result
+        tests_without_result.each do |test|
+          batch_results[test] = {} if batch_results[test].nil?
+          batch_results[test][:status] = Status::UNKNOWN
+        end
+      end
+
+      extraneous_tests_with_result = tests_with_result - tests_to_execute
+
+      return if extraneous_tests_with_result.empty?
+
+      # for some unknown reason extraneous_tests_with_result may be not empty
+      @logger.error("Extraneous runs (#{extraneous_tests_with_result.count}): #{extraneous_tests_with_result.join(' ')}") # rubocop:disable Layout/LineLength
+      # delete extraneous_tests_with_result from results dictionary batch_results
+      extraneous_tests_with_result.each do |test|
+        unless batch_results[test].nil?
+          batch_results.delete(test)
+        end
+      end
     end
 
     # @param [String] batch_id for example: W-123456
@@ -192,6 +210,7 @@ module ParallelCucumber
     # @param [Hash] running_total
     # @param [Array] tests tests to run
     def test_batch(batch_id, env, running_total, tests)
+      @logger.info("Starting tests for #{batch_id} #{tests.join(',')}")
       test_batch_dir = "#{@log_dir}/#{@name}/#{batch_id}" # convention with cucumber.yml
       FileUtils.rm_rf(test_batch_dir)
       FileUtils.mkpath(test_batch_dir)
@@ -238,6 +257,8 @@ module ParallelCucumber
 
         return Helper::Cucumber.unknown_result(tests)
       end
+
+      @logger.info("Did finish execution of tests for #{batch_id} #{tests.join(',')}")
       parse_results(test_result_file, tests)
     ensure
       @logger.update_into(@stdout_logger)
@@ -279,6 +300,7 @@ module ParallelCucumber
     end
 
     def parse_results(f, tests)
+      @logger.info("Start parsing result for tests: #{tests.join(',')}")
       unless File.file?(f)
         @logger.error("Results file does not exist: #{f}")
         return Helper::Cucumber.unknown_result(tests)
@@ -288,7 +310,10 @@ module ParallelCucumber
         @logger.error("Results file is empty: #{f}")
         return Helper::Cucumber.unknown_result(tests)
       end
-      Helper::Cucumber.parse_json_report(json_report)
+      test_result = Helper::Cucumber.parse_json_report(json_report)
+      @logger.info("Did parse result for tests: #{tests.join(',')} -> #{test_result}")
+
+      test_result
     rescue => e
       trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
       @logger.error("Threw: JSON parse of results caused #{trace}")
