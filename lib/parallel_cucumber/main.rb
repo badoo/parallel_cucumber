@@ -42,7 +42,7 @@ module ParallelCucumber
       end
 
       begin
-        all_tests = Helper::Cucumber.selected_tests(@options[:cucumber_options], @options[:cucumber_args])
+        all_tests = Helper::Cucumber.selected_tests(@options[:cucumber_options], @options[:cucumber_args], @options[:env_variables])
       rescue StandardError => error
         Hooks.fire_on_dry_run_error(error)
         raise error
@@ -96,6 +96,7 @@ module ParallelCucumber
       end
 
       @logger.debug("SUMMARY=#{@options[:summary]}") if @options[:summary]
+      @logger.info('Total tests stats:')
       status_totals.each do |s, tt|
         next if tt.empty?
         @logger.info("Total: #{s.to_s.upcase} tests (#{tt.count}): #{tt.join(' ')}")

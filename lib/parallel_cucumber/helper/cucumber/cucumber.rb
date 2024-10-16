@@ -7,13 +7,15 @@ require 'open3'
 require 'tempfile'
 require 'yaml'
 
+require_relative '../../helper/cucumber/cucumber_config_provider'
+
 module ParallelCucumber
   module Helper
     module Cucumber
       class << self
-        def selected_tests(options, args_string)
+        def selected_tests(options, args_string, env)
           puts "ParallelCucumber::Helper::Cucumber selected_tests (#{options.inspect} #{args_string.inspect})"
-          dry_run_report = dry_run_report(options, args_string)
+          dry_run_report = dry_run_report(options, args_string, env)
           puts 'ParallelCucumber::Helper::Cucumber dry_run_report generated'
           scenarios = extract_scenarios(dry_run_report)
           puts "ParallelCucumber::Helper::Cucumber selected scenarios:\n\t\t#{scenarios.join("\n\t\t")}"
@@ -25,129 +27,67 @@ module ParallelCucumber
 
           json.map do |feature|
             scenarios = feature[:elements]
-            file = feature[:uri]
+            file      = feature[:uri]
             scenarios.map { |scenario| "#{file}:#{scenario[:line]}" }
           end.flatten
         end
 
         def parse_json_report(json_report)
-          report = JSON.parse(json_report, symbolize_names: true)
-          results = {}
+          test_results  = JSON.parse(json_report, symbolize_names: true)
 
-          report.each do |feature|
-            feature[:elements].each do |scenario|
-              status = get_scenario_status(scenario)
-              results["#{feature[:uri]}:#{scenario[:line]}"] ||= {}
-              results["#{feature[:uri]}:#{scenario[:line]}"][:status] ||= status
-            end
-          end
-          results
+          # just conversion of status from string to symbol
+          test_results.map do |test_case, test_status|
+            test_status[:status] = test_status[:status].to_sym
+            [test_case, test_status]
+          end.to_h
         end
 
         def unknown_result(tests)
           res = tests.map do |test|
-            [test.to_sym, {status: ::ParallelCucumber::Status::UNKNOWN}]
+            [test, { status: :unknown }]
           end
           res.to_h
         end
 
         private
 
-        def get_scenario_status(scenario)
-          statuses = scenario[:steps].collect { |step| step[:result][:status] }.uniq
+        def dry_run_report(options, _args_string, env)
+          dry_run_env     = env.dup.map { |k, v| [k.to_s, v.to_s] }.to_h # stringify values
+          cucumber_config = ::ParallelCucumber::Helper::CucumberConfigProvider.config_from_options(options, dry_run_env)
+          cli_helper      = ::ParallelCucumber::Helper::CucumberCliHelper.new(cucumber_config)
 
-          actual_status = if statuses.count == 1
-                            statuses.first
-                          else
-                            statuses[1]
-                          end
+          # @type [File] dry_run_report
+          dry_run_report = Tempfile.create(%w[dry-run .json])
 
-          case actual_status
-          when 'failed'
-            Status::FAILED
-          when 'passed'
-            Status::PASSED
-          when 'pending'
-            Status::PENDING
-          when 'skipped'
-            Status::SKIPPED
-          when 'undefined'
-            Status::UNDEFINED
-          when 'unknown'
-            Status::UNKNOWN
-          else
-            Status::UNKNOWN
+          command = [
+            'bundle exec cucumber',
+            '--no-color',
+            '--publish-quiet',
+            '--dry-run',
+            "--format json --out #{dry_run_report.path}",
+            cli_helper.excludes.join(' '),
+            cli_helper.requires.join(' '),
+            cli_helper.tags.join(' '),
+            cli_helper.paths.join(' ')
+          ].join(' ')
+
+          dry_run_env.merge!(cli_helper.env_vars)
+
+          puts("ParallelCucumber::Helper::Cucumber dry_run_report => #{command}")
+
+          dry_run_contents = nil
+
+          begin
+            stdout, stderr, status = Open3.capture3(dry_run_env, command)
+            raise(StandardError, "Failed to generate dry-run report: #{stdout} #{stderr}") unless status.success?
+
+            dry_run_contents = File.read(dry_run_report.path)
+          ensure
+            dry_run_report.close
+            File.delete(dry_run_report)
           end
-        end
 
-        def dry_run_report(options, args_string)
-          options = options.dup
-          options = expand_profiles(options) unless config_file.nil?
-          options = remove_formatters(options)
-          options = remove_dry_run_flag(options)
-          options = remove_strict_flag(options)
-          content = nil
-
-          Tempfile.create(%w[dry-run .json]) do |f|
-            dry_run_options = "--dry-run --format json --out #{f.path}"
-
-            cmd = "bundle exec cucumber #{options} #{dry_run_options} #{args_string}"
-            puts("ParallelCucumber::Helper::Cucumber dry_run_report => #{cmd}")
-            _stdout, stderr, status = Open3.capture3(cmd)
-            f.close
-
-            unless status == 0
-              cmd = "bundle exec #{cmd}" if ENV['BUNDLE_BIN_PATH']
-              raise("Can't generate dry run report: #{status}:\n\t#{cmd}\n\t#{stderr}")
-            end
-
-            content = File.read(f.path)
-          end
-          content
-        end
-
-        def expand_profiles(options, env = {})
-          mutex.synchronize do
-            e = ENV.to_h
-            ENV.replace(e.merge(env))
-            begin
-              content = ERB.new(File.read(config_file)).result
-              config  = YAML.safe_load(content)
-              return _expand_profiles(options, config)
-            ensure
-              ENV.replace(e)
-            end
-          end
-        end
-
-        # @return Mutex
-        def mutex
-          @mutex ||= Mutex.new
-        end
-
-        def config_file
-          Dir.glob('{,.config/,config/}cucumber{.yml,.yaml}').first
-        end
-
-        def _expand_profiles(options, config)
-          profiles = options.scan(/(?:^|\s)((?:--profile|-p)\s+[\S]+)/)
-          profiles.map(&:first).each do |profile|
-            option = profile.gsub(/(--profile|-p)\s+/, '')
-            options.gsub!(profile, _expand_profiles(config.fetch(option), config))
-          end
-          options.strip
-        end
-
-        def remove_formatters(options)
-          options.gsub(/(^|\s)(--format|-f|--out|-o)\s+[\S]+/, ' ')
-        end
-
-        def remove_dry_run_flag(options)
-          options.gsub(/(^|\s)--dry-run(\s|$)/, ' ')
-        end
-
-        def remove_strict_flag(options)
-          options.gsub(/(^|\s)(--strict|-S)(\s|$)/, ' ')
+          dry_run_contents
         end
       end
     end

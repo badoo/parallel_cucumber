@@ -115,7 +115,7 @@ module ParallelCucumber
             out_string = log_until_incomplete_line(logger, out_string + partial)
           end
         rescue EOFError
-          logger.error("== EOF is normal exit, #{wait_thread.inspect}")
+          logger.info("== EOF is normal exit, #{wait_thread.inspect}")
         rescue => e
           logger.error("== Exception in out_reader due to #{e.inspect} #{e.backtrace}")
         ensure

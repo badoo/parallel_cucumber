@@ -37,8 +37,6 @@ module ParallelCucumber
             raise(ArgumentError, "Failed to create Cucumber configuration from options string.\n#{o}\n#{e}")
           end
 
-          File.write('cucumber_config2.yaml', o)
-
           YAML.unsafe_load(o)
         end
       end
@@ -79,6 +77,10 @@ module ParallelCucumber
 
       def env_vars
         @config[:env_vars] || {}
+      end
+
+      def paths
+        @config[:paths] || []
       end
 
       def additional_args
