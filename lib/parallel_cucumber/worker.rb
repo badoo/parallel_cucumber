@@ -1,32 +1,32 @@
 require 'English'
 require 'timeout'
 require 'tmpdir'
-require_relative 'helper/cucumber/cucumber_config_provider.rb'
+require_relative 'helper/cucumber/cucumber_config_provider'
 
 module ParallelCucumber
   class Worker
     include ParallelCucumber::Helper::Utils
 
     def initialize(options:, index:, stdout_logger:, manager:)
-      @group_by = options[:group_by]
-      @batch_timeout = options[:batch_timeout]
-      @batch_error_timeout = options[:batch_error_timeout]
-      @setup_timeout = options[:setup_timeout]
-      @cucumber_options = options[:cucumber_options]
-      @test_command = options[:test_command]
-      @index = index
-      @name = "W#{@index}"
-      @setup_worker = options[:setup_worker]
-      @teardown_worker = options[:teardown_worker]
-      @worker_delay = options[:worker_delay]
-      @debug = options[:debug]
-      @log_decoration = options[:log_decoration]
-      @log_dir = options[:log_dir]
-      @log_file = "#{@log_dir}/worker_#{index}.log"
-      @stdout_logger = stdout_logger # .sync writes only.
+      @group_by             = options[:group_by]
+      @batch_timeout        = options[:batch_timeout]
+      @batch_error_timeout  = options[:batch_error_timeout]
+      @setup_timeout        = options[:setup_timeout]
+      @cucumber_options     = options[:cucumber_options]
+      @test_command         = options[:test_command]
+      @index                = index
+      @name                 = "W#{@index}"
+      @setup_worker         = options[:setup_worker]
+      @teardown_worker      = options[:teardown_worker]
+      @worker_delay         = options[:worker_delay]
+      @debug                = options[:debug]
+      @log_decoration       = options[:log_decoration]
+      @log_dir              = options[:log_dir]
+      @log_file             = "#{@log_dir}/worker_#{index}.log"
+      @stdout_logger        = stdout_logger # .sync writes only.
       @is_busy_running_test = false
-      @jobs_queue = ::Thread::Queue.new
-      @manager = manager
+      @jobs_queue           = ::Thread::Queue.new
+      @manager              = manager
     end
 
     attr_reader :index
@@ -69,9 +69,9 @@ module ParallelCucumber
 
       File.delete(@log_file) if File.exist?(@log_file)
 
-      @logger = ParallelCucumber::CustomLogger.new(autoshutting_file)
+      @logger          = ParallelCucumber::CustomLogger.new(autoshutting_file)
       @logger.progname = "Worker-#{@index}"
-      @logger.level = @debug ? ParallelCucumber::CustomLogger::DEBUG : ParallelCucumber::CustomLogger::INFO
+      @logger.level    = @debug ? ParallelCucumber::CustomLogger::DEBUG : ParallelCucumber::CustomLogger::INFO
 
       results = {}
       begin
@@ -88,7 +88,7 @@ module ParallelCucumber
         @logger.update_into(@stdout_logger)
 
         # TODO: Replace running total with queues for passed, failed, unknown, skipped.
-        running_total = Hash.new(0) # Default new keys to 0
+        running_total         = Hash.new(0) # Default new keys to 0
         running_total[:group] = env[@group_by] if @group_by
         begin
           setup(env)
@@ -132,7 +132,7 @@ module ParallelCucumber
 
     def run_batch(env, results, running_total, tests)
       @is_busy_running_test = true
-      batch_id = generate_batch_id
+      batch_id              = generate_batch_id
       @logger.debug("Batch ID is #{batch_id}")
 
       batch_mm, batch_ss = time_it do
@@ -144,12 +144,14 @@ module ParallelCucumber
         end
 
         batch_results = test_batch(batch_id, env, running_total, tests)
+
         begin
           Hooks.fire_after_batch_hooks(batch_results, batch_id, env)
         rescue StandardError => e
           trace = e.backtrace.join("\n\t")
           @logger.warn("There was exception in after_batch hook #{e.message} \n #{trace}")
         end
+
         process_results(batch_results, tests)
         running_totals(batch_results, running_total)
         results.merge!(batch_results)
@@ -175,28 +177,29 @@ module ParallelCucumber
       @logger.info("Running totals: #{running_total.sort} at time #{Time.now}")
     end
 
-    # @param [Hash] batch_results dictionary of tests with results
-    # @param [Array] tests_to_execute list of tests to execute
+    # @param [Hash] batch_results dictionary of tests with results. keys are symbols
+    # @param [Array] tests_to_execute list of tests to execute, strings
     def process_results(batch_results, tests_to_execute)
+      tests_to_execute     = tests_to_execute.map(&:to_sym)
       tests_with_result    = batch_results.keys
       tests_without_result = tests_to_execute - tests_with_result
 
       unless tests_without_result.empty?
-        @logger.error("Don't have test result for #{tests_without_result.count} out of #{tests_to_execute}: #{tests_without_result.join(' ')}") # rubocop:disable Layout/LineLength
+        @logger.error("Don't have test result for #{tests_without_result.count} out of #{tests_to_execute.count}: #{tests_without_result.join(' ')}") # rubocop:disable Layout/LineLength
 
         # add result 'UNKNOWN' for each test that does not have a result
         tests_without_result.each do |test|
-          batch_results[test] = {} if batch_results[test].nil?
-          batch_results[test][:status] = Status::UNKNOWN
+          batch_results[test] = { status: :unknown }
         end
       end
 
       extraneous_tests_with_result = tests_with_result - tests_to_execute
 
-      return if extraneous_tests_with_result.empty?
+      unless extraneous_tests_with_result.empty?
+        # for some unknown reason extraneous_tests_with_result may be not empty
+        @logger.error("Extraneous runs (#{extraneous_tests_with_result.count}): #{extraneous_tests_with_result.join(' ')}") # rubocop:disable Layout/LineLength
+      end
 
-      # for some unknown reason extraneous_tests_with_result may be not empty
-      @logger.error("Extraneous runs (#{extraneous_tests_with_result.count}): #{extraneous_tests_with_result.join(' ')}") # rubocop:disable Layout/LineLength
       # delete extraneous_tests_with_result from results dictionary batch_results
       extraneous_tests_with_result.each do |test|
         unless batch_results[test].nil?
@@ -216,18 +219,20 @@ module ParallelCucumber
       FileUtils.mkpath(test_batch_dir)
 
       batch_env = {
-        'TEST_BATCH_ID' => batch_id,
+        'TEST_BATCH_ID'  => batch_id,
         'TEST_BATCH_DIR' => test_batch_dir,
-        'BATCH_NUMBER' => running_total[:batches].to_s
+        'BATCH_NUMBER'   => running_total[:batches].to_s
       }.merge(env)
 
       cucumber_config = ::ParallelCucumber::Helper::CucumberConfigProvider.config_from_options(@cucumber_options, batch_env)
-      cli_helper = ::ParallelCucumber::Helper::CucumberCliHelper.new(cucumber_config)
+      cli_helper      = ::ParallelCucumber::Helper::CucumberCliHelper.new(cucumber_config)
 
       batch_env.merge!(cli_helper.env_vars)
 
       test_result_file = File.join(test_batch_dir, 'test_state.json')
-      formats = cli_helper.formats + ["--format json --out #{test_result_file}"]
+      formats          = cli_helper.formats + [
+        "--format ParallelCucumber::Helper::Cucumber::JsonStatusFormatter --out #{test_result_file}"
+      ]
 
       command = [
         @test_command,
@@ -242,7 +247,7 @@ module ParallelCucumber
       begin
         ParallelCucumber::Helper::Command.exec_command(
           batch_env, 'batch', command, @logger, @log_decoration,
-          timeout: @batch_timeout, capture: true, return_script_error: true,
+          timeout:           @batch_timeout, capture: true, return_script_error: true,
           return_on_timeout: true, collect_stacktrace: true
         )
       rescue => e
@@ -259,7 +264,10 @@ module ParallelCucumber
       end
 
       @logger.info("Did finish execution of tests for #{batch_id} #{tests.join(',')}")
-      parse_results(test_result_file, tests)
+      results = parse_results(test_result_file, tests)
+      @logger.info("Did finish parsing results of tests for #{batch_id}")
+      @logger.debug("Parsed test results for #{batch_id}\n#{YAML.dump(results)}")
+      results
     ensure
       @logger.update_into(@stdout_logger)
     end
@@ -305,15 +313,15 @@ module ParallelCucumber
         @logger.error("Results file does not exist: #{f}")
         return Helper::Cucumber.unknown_result(tests)
       end
-      json_report = File.read(f)
+      json_report   = File.read(f)
       if json_report.empty?
         @logger.error("Results file is empty: #{f}")
         return Helper::Cucumber.unknown_result(tests)
       end
-      test_result = Helper::Cucumber.parse_json_report(json_report)
-      @logger.info("Did parse result for tests: #{tests.join(',')} -> #{test_result}")
+      tests_results = Helper::Cucumber.parse_json_report(json_report)
+      @logger.info("Did parse result for tests: #{tests_results}")
 
-      test_result
+      tests_results
     rescue => e
       trace = e.backtrace.join("\n\t").sub("\n\t", ": #{$ERROR_INFO}#{e.class ? " (#{e.class})" : ''}\n\t")
       @logger.error("Threw: JSON parse of results caused #{trace}")
