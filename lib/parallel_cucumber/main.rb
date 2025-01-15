@@ -10,15 +10,15 @@ module ParallelCucumber
 
       @logger = ParallelCucumber::CustomLogger.new(STDOUT)
       load_external_files
-      @logger.progname = 'Primary' # Longer than 'Main', to make the log file pretty.
-      @logger.level = options[:debug] ? ParallelCucumber::CustomLogger::DEBUG : ParallelCucumber::CustomLogger::INFO
+      @logger.progname                = 'ParallelCucumber'
+      @logger.level                   = ParallelCucumber::CustomLogger::DEBUG
       @redis_url, @default_queue_name = @options[:queue_connection_params]
-      queue_timeout = @options[:queue_connection_timeout]
-      @redis_pool = ConnectionPool::Wrapper.new(size: 10, timeout: queue_timeout) {
+      queue_timeout                   = @options[:queue_connection_timeout]
+      @redis_pool                     = ConnectionPool::Wrapper.new(size: 10, timeout: queue_timeout) {
         Redis.new(
-          url: @redis_url,
-          timeout: queue_timeout,
-          connect_timeout: queue_timeout,
+          url:                @redis_url,
+          timeout:            queue_timeout,
+          connect_timeout:    queue_timeout,
           reconnect_attempts: @options[:queue_reconnect_attempts],
         )
       }
@@ -67,69 +67,110 @@ module ParallelCucumber
 
       number_of_workers = determine_work_and_batch_size(queue.length)
 
-      status_totals = {}
+      status_totals      = {}
       total_mm, total_ss = time_it do
-        results = run_parallel_workers(number_of_workers) || {}
+        workers_results = run_parallel_workers(number_of_workers) || {}
+
+        worker_stats_regexp = /^:worker-\d+$/
+        executed_tests      = []
+        worker_stats        = []
+
+        # @type [Hash] worker_results
+        workers_results.each do |workers_result|
+          begin
+            if workers_result.first.to_s.match?(worker_stats_regexp)
+              worker_stats.push(workers_result)
+            else
+              executed_tests.push(workers_result)
+            end
+          rescue StandardError => e
+            @logger.error("Failed with error while parsing workers_result: #{workers_result}")
+            @logger.error("Error: #{e.message} #{e.backtrace}")
+          end
+        end
+
+        executed_tests = executed_tests.to_h
+        worker_stats   = worker_stats.to_h
 
         begin
-          Hooks.fire_after_workers(results: results, queue: queue)
+          Hooks.fire_after_workers(results: executed_tests.dup, queue: queue)
         rescue StandardError => e
           trace = e.backtrace.join("\n\t")
           @logger.warn("There was exception in after_workers hook #{e.message} \n #{trace}")
         end
 
-        unrun = tests - results.keys
+        unrun = tests - executed_tests.keys.map(&:to_s)
         @logger.error("Tests #{unrun.join(' ')} were not run") unless unrun.empty?
         @logger.error("Queue #{queue.name} is not empty") unless queue.empty?
 
         status_totals = Status.constants.map do |status|
-          status = Status.const_get(status)
-          tests_with_status = results.select { |_t, s| s[:status] == status }.keys
-          [status, tests_with_status]
+          status_symbol     = Status.const_get(status)
+          tests_with_status = executed_tests.select { |_t, s| s[:status] == status_symbol }.keys.map(&:to_s)
+          [status_symbol, tests_with_status]
         end.to_h
 
         Helper::Command.wrap_block(@options[:log_decoration], 'Worker summary', @logger) do
-          results.find_all { |w| w.first =~ /^:worker-/ }.each { |w| @logger.info("#{w.first} #{w.last.sort}") }
+          worker_stats.each { |w| @logger.info("Stats for worker: #{w.first} #{w.last.sort}") }
         end
-
-        report_by_group(results)
       end
 
-      @logger.debug("SUMMARY=#{@options[:summary]}") if @options[:summary]
-      @logger.info('Total tests stats:')
-      status_totals.each do |s, tt|
-        next if tt.empty?
-        @logger.info("Total: #{s.to_s.upcase} tests (#{tt.count}): #{tt.join(' ')}")
-        filename = @options[:summary] && @options[:summary][s.to_s.downcase]
-        open(filename, 'w') { |f| f << tt.join("\n") } if filename
+      @logger.info("[#{self.class}]: SUMMARY=#{@options[:summary]}") unless @options[:summary].nil?
+
+      @logger.info("[#{self.class}]: Total tests stats:")
+
+      Status.constants.each do |status|
+        status_symbol         = Status.const_get(status)
+        test_paths_for_status = status_totals[status_symbol] || [] # possible nil here if there were no occasions of such status
+        test_count_for_status = test_paths_for_status.count
+        @logger.info("[#{self.class}]: Total amount of tests with status: #{status_symbol.to_s.upcase} is (#{test_count_for_status})")
+
+        filename = @options.fetch(:summary, nil)&.fetch(test_result_keyword.to_s.downcase, nil)
+
+        unless filename.nil?
+          File.open(filename, 'w') { |f| f.write(test_paths.join("\n")) }
+        end
       end
 
       @logger.info("\nTook #{total_mm} minutes #{total_ss} seconds")
 
-      exit((tests - status_totals[Status::PASSED] - status_totals[Status::SKIPPED]).empty? ? 0 : 1)
-    end
+      result_failed_tests    = status_totals.fetch(Status::FAILED, [])
+      result_passed_tests    = status_totals.fetch(Status::PASSED, [])
+      result_pending_tests   = status_totals.fetch(Status::PENDING, [])
+      result_skipped_tests   = status_totals.fetch(Status::SKIPPED, [])
+      result_undefined_tests = status_totals.fetch(Status::UNDEFINED, [])
+      result_unknown_tests   = status_totals.fetch(Status::UNKNOWN, [])
 
-    def report_by_group(results)
-      group = Hash.new { |h, k| h[k] = Hash.new(0) } # Default new keys to 0
+      successful_test_run = true
 
-      Helper::Command.wrap_block(@options[:log_decoration], 'Worker summary', @logger) do
-        results.find_all { |w| w.first =~ /^:worker-/ }.each do |w|
-          # w = [:worker-0, [[:batches, 7], [:group, "localhost2"], [:skipped, 7]]]
-          gp = w.last[:group]
-          next unless gp
-          w.last.each { |(k, v)| group[gp][k] += w.last[k] if v && k != :group }
-          group[gp][:group] = {} unless group[gp].key?(:group)
-          group[gp][:group][w.first] = 1
+      [
+        Status::FAILED,
+        Status::PENDING,
+        Status::UNKNOWN,
+        Status::UNDEFINED,
+      ].each do |status|
+        tests_for_status = status_totals.fetch(status, [])
+
+        unless tests_for_status.empty?
+          successful_test_run = false
+          @logger.error("[#{self.class}]: Will exit with non-zero code due to tests with result \"#{status}\": #{tests_for_status.count}")
         end
       end
 
-      @logger.info "== Groups key count #{group.keys.count}"
+      executed_tests     = (result_failed_tests + result_passed_tests + result_pending_tests + result_skipped_tests + result_undefined_tests + result_unknown_tests).flatten.sort.uniq
+      not_executed_tests = tests.sort.uniq - executed_tests
 
-      return unless group.keys.count > 1
-
-      Helper::Command.wrap_block(@options[:log_decoration], 'Group summary', @logger) do
-        group.each { |(k, v)| @logger.info("#{k} #{v.sort}") }
+      unless not_executed_tests.empty?
+        @logger.error("\n[#{self.class}]: Some tests were not executed: #{not_executed_tests.join(', ')}")
       end
+
+      exit_code = if successful_test_run && not_executed_tests.empty?
+                    0
+                  else
+                    1
+                  end
+
+      @logger.info("\n[#{self.class}]: Finished test runs and will exit with exit code: #{exit_code}")
+      exit(exit_code)
     end
 
     def run_parallel_workers(number_of_workers)
@@ -137,7 +178,7 @@ module ParallelCucumber
                                  @options[:log_decoration]['worker_block'] || 'workers',
                                  @logger) do
 
-        worker_manager =  ParallelCucumber::WorkerManager.new(@options, @logger, @redis_pool, @default_queue_name)
+        worker_manager = ParallelCucumber::WorkerManager.new(@options, @logger, @redis_pool, @default_queue_name)
         worker_manager.start(number_of_workers)
       ensure
         worker_manager.kill
@@ -163,7 +204,7 @@ module ParallelCucumber
       LOG
 
       if (@options[:batch_size] - 1) * number_of_workers >= count
-        original_batch_size = @options[:batch_size]
+        original_batch_size   = @options[:batch_size]
         @options[:batch_size] = [(count.to_f / number_of_workers).floor, 1].max
         @logger.info(<<-LOG)
           Batch size was overridden to #{@options[:batch_size]}.

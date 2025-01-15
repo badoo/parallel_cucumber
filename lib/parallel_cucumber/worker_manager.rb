@@ -64,13 +64,20 @@ module ParallelCucumber
     end
 
     def start_workers
-      indices = (0...@workers.size).to_a
-      @results = Parallel.map(indices.dup, in_threads: @workers.size,
-                              finish: ->(_, ix, _) { @logger.synch { |l| l.info("Finished: #{ix} remaining: #{indices -= [ix]}") } }) do |index|
-        puts "Starting W#{index}"
-        @workers["W#{index}"].start(env_for_worker(@options[:env_variables], index))
+      worker_indexes     = (0...@workers.size).to_a
+      worker_finish_proc = lambda do |_, ix, _|
+        @logger.synch { |l| l.info("Worker #{ix} has finished working: #{ix}. remaining workers: #{worker_indexes -= [ix]}") }
       end
-      @results.inject do |seed, result|
+
+      # @type [Array] all_results [[test_results, { :worker-0 => worker_stats }], [test_results, { :worker-1 => worker_stats }]]
+      results = Parallel.map(worker_indexes.dup, in_threads: @workers.size, finish: worker_finish_proc) do |index|
+        puts "Starting worker W#{index}"
+        # @type [Array] worker_results [test_results, { :worker-0 => worker_stats }]
+        worker_results = @workers["W#{index}"].start(env_for_worker(@options[:env_variables], index))
+        worker_results
+      end
+
+      results.inject do |seed, result|
         seed.merge(result) do |_key, oldval, newval|
           if oldval[:finish_time].nil? && newval[:finish_time].nil?
             @logger.warn('Both oldval finish_time and newval finish_time are empty')

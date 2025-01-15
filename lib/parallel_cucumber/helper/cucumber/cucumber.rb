@@ -18,7 +18,10 @@ module ParallelCucumber
           dry_run_report = dry_run_report(options, args_string, env)
           puts 'ParallelCucumber::Helper::Cucumber dry_run_report generated'
           scenarios = extract_scenarios(dry_run_report)
+          puts("##teamcity[blockOpened name='SelectedScenarios' description='Selected Scenarios']")
           puts "ParallelCucumber::Helper::Cucumber selected scenarios:\n\t\t#{scenarios.join("\n\t\t")}"
+          puts("##teamcity[blockClosed name='SelectedScenarios']")
+
           scenarios
         end
 
