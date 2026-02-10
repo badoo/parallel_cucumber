@@ -12,6 +12,21 @@ module ParallelCucumber
         # @param [String] options_string string that is passed by --cucumber-options
         # @param [Hash] batch_env environment for running a cucumber test in a child process
         # @return [Hash] Cucumber configuration normalized to Hash
+        # Extracts environment variables (VAR=value) from cucumber options string.
+        # These take precedence over env vars from config/cucumber.yml profiles.
+        # Matches Cucumber's extract_environment_variables format.
+        # @param [String] options_string string that is passed by --cucumber-options
+        # @return [Hash] env vars from the options string, e.g. {"SOME_VAR" => "2"}
+        def env_vars_from_options(options_string)
+          return {} if options_string.nil? || options_string.empty?
+
+          options_string.split(/\s+/).each_with_object({}) do |arg, result|
+            if arg =~ /^(\w+)=(.*)$/
+              result[Regexp.last_match(1)] = Regexp.last_match(2)
+            end
+          end
+        end
+
         def config_from_options(options_string, batch_env)
           script = <<~EOSCRIPT
             require "cucumber/cli/configuration"

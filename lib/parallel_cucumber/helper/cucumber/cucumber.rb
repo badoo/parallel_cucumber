@@ -74,7 +74,9 @@ module ParallelCucumber
             cli_helper.paths.join(' ')
           ].join(' ')
 
+          # Config env vars first (from profile), then CLI overrides from --cucumber-options
           dry_run_env.merge!(cli_helper.env_vars)
+          dry_run_env.merge!(::ParallelCucumber::Helper::CucumberConfigProvider.env_vars_from_options(options))
 
           puts("ParallelCucumber::Helper::Cucumber dry_run_report => #{command}")
 

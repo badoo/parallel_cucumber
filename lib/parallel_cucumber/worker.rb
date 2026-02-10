@@ -227,7 +227,9 @@ module ParallelCucumber
       cucumber_config = ::ParallelCucumber::Helper::CucumberConfigProvider.config_from_options(@cucumber_options, batch_env)
       cli_helper      = ::ParallelCucumber::Helper::CucumberCliHelper.new(cucumber_config)
 
+      # Config env vars first (from profile), then CLI overrides from --cucumber-options
       batch_env.merge!(cli_helper.env_vars)
+      batch_env.merge!(::ParallelCucumber::Helper::CucumberConfigProvider.env_vars_from_options(@cucumber_options))
 
       test_result_file = File.join(test_batch_dir, 'test_state.json')
       formats          = cli_helper.formats + [
