@@ -3,7 +3,7 @@ module ParallelCucumber
     module Processes
       class << self
         def ms_windows?
-          RUBY_PLATFORM =~ /mswin|mingw|migw32|cygwin/
+          RUBY_PLATFORM =~ /mswin|mingw|mingw32|cygwin/
         end
 
         def cp_rv(source, dest, logger = nil)

@@ -124,10 +124,10 @@ module ParallelCucumber
         test_count_for_status = test_paths_for_status.count
         @logger.info("[#{self.class}]: Total amount of tests with status: #{status_symbol.to_s.upcase} is (#{test_count_for_status})")
 
-        filename = @options.fetch(:summary, nil)&.fetch(test_result_keyword.to_s.downcase, nil)
+        filename = @options.fetch(:summary, nil)&.fetch(status_symbol.to_s.downcase, nil)
 
         unless filename.nil?
-          File.open(filename, 'w') { |f| f.write(test_paths.join("\n")) }
+          File.open(filename, 'w') { |f| f.write(test_paths_for_status.join("\n")) }
         end
       end
 
